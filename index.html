@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Reclaim Your Core</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <svg class="logo-mark" width="28" height="28" viewBox="0 0 32 32" fill="none" aria-label="Reclaim Your Core logo">
+          <path d="M16 2C8.268 2 2 8.268 2 16s6.268 14 14 14 14-6.268 14-14S23.732 2 16 2z" stroke="currentColor" stroke-width="2.2" fill="none"/>
+          <path d="M16 7v18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11 12c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+          <path d="M11 20c0 2.761 2.239 5 5 5s5-2.239 5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        </svg>
+        <span class="app-title">Reclaim Your Core</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" data-theme-toggle aria-label="Toggle dark mode">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <button class="icon-btn" id="exportBtn" aria-label="Export data">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Desktop Tabs -->
+    <nav class="desktop-tabs">
+      <div class="desktop-tabs-inner">
+        <button class="desktop-tab active" data-tab="today">Today</button>
+        <button class="desktop-tab" data-tab="nutrition">Nutrition</button>
+        <button class="desktop-tab" data-tab="progress">Progress</button>
+        <button class="desktop-tab" data-tab="program">Program</button>
+        <button class="desktop-tab" data-tab="supplements">Supplements</button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- TAB 1: TODAY -->
+      <div id="tab-today" class="tab-content active">
+        <h2 class="section-title" id="today-date"></h2>
+        <div class="kpi-grid" id="kpi-grid"></div>
+
+        <div class="card" id="workout-card">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0" id="workout-title">Today's Workout</h3>
+          </div>
+          <div id="workout-exercises"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0">Daily Habits</h3>
+          </div>
+          <div id="habits-list"></div>
+        </div>
+      </div>
+
+      <!-- TAB 2: NUTRITION -->
+      <div id="tab-nutrition" class="tab-content">
+        <h2 class="section-title">Macro Tracker</h2>
+
+        <div class="protein-ring-wrap">
+          <div class="protein-ring-container">
+            <canvas id="proteinRingCanvas" width="320" height="320"></canvas>
+            <div class="protein-ring-text">
+              <span class="protein-ring-value" id="proteinRingValue">0g</span>
+              <span class="protein-ring-label">of <span id="proteinTargetLabel">105g</span></span>
+            </div>
+          </div>
+          <div class="protein-ring-info">
+            <div class="protein-target-display">Protein target: <strong id="proteinTargetDisplay">105g</strong></div>
+            <div class="protein-remaining" id="proteinRemaining">105g remaining</div>
+          </div>
+        </div>
+
+        <!-- Macro Bars -->
+        <div class="macro-bars card mb-4">
+          <div class="macro-bar-row">
+            <div class="macro-bar-label">
+              <span class="macro-bar-name">Calories</span>
+              <span class="macro-bar-values"><span id="caloriesCurrent">0</span> / <span id="caloriesTarget">1700</span> kcal</span>
+            </div>
+            <div class="macro-bar-track">
+              <div class="macro-bar-fill macro-bar-calories" id="caloriesBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="macro-bar-row">
+            <div class="macro-bar-label">
+              <span class="macro-bar-name">Carbs</span>
+              <span class="macro-bar-values"><span id="carbsCurrent">0</span> / <span id="carbsTarget">170</span> g</span>
+            </div>
+            <div class="macro-bar-track">
+              <div class="macro-bar-fill macro-bar-carbs" id="carbsBar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="macro-bar-row">
+            <div class="macro-bar-label">
+              <span class="macro-bar-name">Fat</span>
+              <span class="macro-bar-values"><span id="fatCurrent">0</span> / <span id="fatTarget">57</span> g</span>
+            </div>
+            <div class="macro-bar-track">
+              <div class="macro-bar-fill macro-bar-fat" id="fatBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Macro Targets (collapsible) -->
+        <div class="accordion mb-4" id="acc-macro-targets">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-macro-targets')">
+            Macro Targets
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <div class="settings-row">
+              <div class="measurement-field" style="min-width:80px;flex:0">
+                <label>Calories (kcal)</label>
+                <input type="number" id="caloriesTargetInput" min="800" max="4000" value="1700">
+              </div>
+              <div class="measurement-field" style="min-width:80px;flex:0">
+                <label>Protein (g)</label>
+                <input type="number" id="proteinTargetInput" min="50" max="300" value="105">
+              </div>
+              <div class="measurement-field" style="min-width:80px;flex:0">
+                <label>Carbs (g)</label>
+                <input type="number" id="carbsTargetInput" min="0" max="600" value="170">
+              </div>
+              <div class="measurement-field" style="min-width:80px;flex:0">
+                <label>Fat (g)</label>
+                <input type="number" id="fatTargetInput" min="0" max="200" value="57">
+              </div>
+            </div>
+            <button class="btn-primary" id="saveMacroTargetsBtn">Save Targets</button>
+          </div>
+        </div>
+
+        <h3 class="section-title">Quick Add</h3>
+        <div class="quick-add-grid" id="quickAddGrid"></div>
+
+        <h3 class="section-title">Custom Entry</h3>
+        <div class="custom-entry-macro">
+          <input type="text" id="customFoodName" placeholder="Food name">
+          <div class="custom-entry-macros-row">
+            <input type="number" id="customFoodCalories" placeholder="kcal" min="0">
+            <input type="number" id="customFoodProtein" placeholder="protein g" min="0">
+            <input type="number" id="customFoodCarbs" placeholder="carbs g" min="0">
+            <input type="number" id="customFoodFat" placeholder="fat g" min="0">
+            <button class="btn-primary" id="customAddBtn">Add</button>
+          </div>
+        </div>
+
+        <div class="flex-between mb-3">
+          <h3 class="section-title" style="margin-bottom:0">Today's Log</h3>
+          <button class="btn-danger" id="clearDayBtn">Clear Day</button>
+        </div>
+        <div class="card" style="padding: var(--space-2) var(--space-4);">
+          <div id="mealLog"></div>
+        </div>
+
+        <!-- PRE/POST WORKOUT NUTRITION GUIDE -->
+        <div class="mb-6">
+          <h2 class="guide-heading mt-4">Pre & Post Workout Nutrition</h2>
+
+          <div class="accordion" id="acc-preworkout">
+            <button class="accordion-trigger" onclick="toggleAccordion('acc-preworkout')">
+              Pre-Workout (1–2 hours before)
+              <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="accordion-body">
+              <h4>Target: 15–20g protein + 30–40g carbs</h4>
+              <p><strong>Why:</strong> Never lift fasted — cortisol is already elevated in the morning, and menopause amplifies this. Pre-workout fuel blunts the cortisol spike and provides energy.</p>
+              <ul>
+                <li>Cottage cheese + banana</li>
+                <li>Smoked salmon + toast</li>
+                <li>Protein shake + oatmeal</li>
+                <li>Cottage cheese + berries</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="accordion" id="acc-poststrength">
+            <button class="accordion-trigger" onclick="toggleAccordion('acc-poststrength')">
+              Post-Workout — Strength Days (within 30–45 min)
+              <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="accordion-body">
+              <h4>Target: 40g protein (higher than standard 20–25g)</h4>
+              <p><strong>Why:</strong> Anabolic resistance in postmenopausal women means muscle protein synthesis requires a higher protein dose to activate. Aim for 2.3–3.5g leucine per meal.</p>
+              <p class="guide-note">Leucine-rich sources are critical for optimal muscle protein synthesis.</p>
+              <ul>
+                <li>Protein shake + chicken breast</li>
+                <li>Salmon + quinoa</li>
+                <li>Cottage cheese + protein powder</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="accordion" id="acc-postcycling">
+            <button class="accordion-trigger" onclick="toggleAccordion('acc-postcycling')">
+              Post-Workout — Cycling Days
+              <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="accordion-body">
+              <h4>Protein: 30–40g + Carbs: 40–60g</h4>
+              <p>Glycogen replenishment is key after endurance work. Combine protein with carbs for recovery.</p>
+              <ul>
+                <li>Smoothie with protein + banana + oats</li>
+                <li>Turkey sandwich + fruit</li>
+                <li>Recovery shake + granola bar</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="accordion" id="acc-guidelines">
+            <button class="accordion-trigger" onclick="toggleAccordion('acc-guidelines')">
+              General Nutrition Guidelines
+              <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="accordion-body">
+              <ul>
+                <li><strong>4–5 meals per day</strong>, each with 25–40g protein — anabolic resistance means each meal needs a higher dose</li>
+                <li><strong>Leucine-rich proteins:</strong> whey, chicken, fish, beef, collagen peptides</li>
+                <li><strong>Omega-3 rich foods:</strong> salmon, sardines, walnuts — anti-inflammatory</li>
+                <li><strong>Cortisol-lowering foods:</strong> dark leafy greens, avocado, dark chocolate, fermented foods, chamomile tea</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cortisol-Lowering Foods -->
+        <div class="accordion mb-6" id="acc-cortisol">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-cortisol')">
+            Cortisol-Lowering Foods Reference
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <h4>Magnesium-rich</h4>
+            <ul>
+              <li>Dark leafy greens, pumpkin seeds, dark chocolate, avocado</li>
+            </ul>
+            <h4>Omega-3</h4>
+            <ul>
+              <li>Fatty fish, walnuts, flaxseed</li>
+            </ul>
+            <h4>Adaptogens</h4>
+            <ul>
+              <li>Ashwagandha (300–600mg/day), holy basil</li>
+            </ul>
+            <h4>Fermented</h4>
+            <ul>
+              <li>Kimchi, sauerkraut, miso, kombucha</li>
+            </ul>
+            <h4>Calming</h4>
+            <ul>
+              <li>Chamomile tea, tart cherry juice</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PROGRESS -->
+      <div id="tab-progress" class="tab-content">
+        <h2 class="section-title">12-Week Program</h2>
+        <div class="phase-timeline" id="phaseTimeline"></div>
+        <div class="week-selector">
+          <button class="week-btn" id="weekPrev">−</button>
+          <div class="week-display" id="weekDisplay">Week 1</div>
+          <button class="week-btn" id="weekNext">+</button>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">Body Measurements</h3>
+          <div class="measurement-row">
+            <div class="measurement-field">
+              <label>Weight (lbs)</label>
+              <input type="number" id="weightInput" step="0.1" placeholder="e.g. 176">
+            </div>
+            <div class="measurement-field">
+              <label>Waist (inches)</label>
+              <input type="number" id="waistInput" step="0.1" placeholder="e.g. 34">
+            </div>
+            <button class="btn-primary" id="saveMeasurementsBtn" style="align-self:end">Save</button>
+          </div>
+          <div class="chart-container">
+            <canvas id="measurementChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">Strength Progress</h3>
+          <table class="lift-table">
+            <thead>
+              <tr>
+                <th>Lift</th>
+                <th>Current (lbs)</th>
+                <th>Previous</th>
+              </tr>
+            </thead>
+            <tbody id="liftTableBody"></tbody>
+          </table>
+          <div style="margin-top: var(--space-3);">
+            <button class="btn-primary" id="saveLiftsBtn">Save Lifts</button>
+          </div>
+          <div class="chart-container mt-4">
+            <canvas id="liftChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: PROGRAM -->
+      <div id="tab-program" class="tab-content">
+        <h2 class="section-title mb-6">Program Reference</h2>
+
+        <div class="accordion" id="acc-schedule">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-schedule')">
+            Weekly Schedule
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <h4>Monday — Upper Body Push</h4>
+            <ul>
+              <li><strong>Warm-up:</strong> Foam roll thoracic spine + lats (2 min), band pull-aparts 2×15, arm circles + shoulder CARs</li>
+              <li>Barbell Bench Press: 4×4–5 @ 80–85% 1RM</li>
+              <li>Barbell Overhead Press: 4×4–5 @ 80–85% 1RM</li>
+              <li>Incline DB Press: 3×8–10</li>
+              <li>Cable Lateral Raises: 3×10–12</li>
+              <li>Tricep Dips: 3×8–10</li>
+              <li><strong>Finisher:</strong> Plank hold 3×30–45s</li>
+            </ul>
+            <h4>Tuesday — Lower Body (Quad/Glute)</h4>
+            <ul>
+              <li><strong>Warm-up:</strong> Foam roll quads, adductors, glutes (3 min), bodyweight squats 2×10, banded glute bridges 2×15</li>
+              <li>Barbell Back Squat: 4×4–5 @ 80–85% 1RM</li>
+              <li>Front Squat or Goblet Squat: 3×6–8</li>
+              <li>Bulgarian Split Squat (DB): 3×8–10 each</li>
+              <li>Leg Press: 3×10–12</li>
+              <li>Hip Thrust (Barbell): 3×8–10</li>
+              <li><strong>Finisher:</strong> Pallof Press 3×10 each side</li>
+            </ul>
+            <h4>Wednesday — Active Recovery</h4>
+            <ul>
+              <li><strong>Vagus Nerve:</strong> Cold water face splash (30s), deep breathing 4-7-8 (3 min), humming/chanting (2–3 min)</li>
+              <li>Planks: 3×30–60s</li>
+              <li>Pallof Press: 3×10 each</li>
+              <li>Bird Dogs: 3×10 each</li>
+              <li><strong>Fascia Release:</strong> Foam roll IT band + thoracic spine (5 min), lacrosse ball glutes + plantar fascia (4 min)</li>
+              <li><strong>Cool Down:</strong> Gentle yoga — cat-cow, child's pose, thread the needle (5 min)</li>
+            </ul>
+            <h4>Thursday — Upper Body Pull</h4>
+            <ul>
+              <li><strong>Warm-up:</strong> Foam roll lats + pecs (2 min), band pull-aparts 2×15, scapular wall slides 2×10</li>
+              <li>Barbell Bent-Over Row: 4×4–5 @ 80–85% 1RM</li>
+              <li>Weighted Pull-ups or Lat Pulldown: 4×4–6</li>
+              <li>Seated Cable Row: 3×8–10</li>
+              <li>Face Pulls: 3×12–15</li>
+              <li>Barbell or DB Bicep Curls: 3×8–10</li>
+              <li><strong>Finisher:</strong> Dead Bug 3×8 each side</li>
+            </ul>
+            <h4>Friday — Lower Body (Hinge/Posterior)</h4>
+            <ul>
+              <li><strong>Warm-up:</strong> Foam roll hamstrings, calves, piriformis (3 min), hip 90/90 mobility 2×5 each, banded monster walks 2×12 each</li>
+              <li>Barbell Deadlift: 4×3–5 @ 80–90% 1RM</li>
+              <li>Romanian Deadlift: 3×6–8</li>
+              <li>Single-Leg RDL (DB): 3×8–10 each</li>
+              <li>Glute-Ham Raise or Nordic Curl: 3×6–8</li>
+              <li>Standing Calf Raises: 3×12–15</li>
+              <li><strong>Finisher:</strong> Hanging Leg Raises 3×8–10</li>
+            </ul>
+            <h4>Saturday / Sunday — Cycling</h4>
+            <ul>
+              <li>Cycling ride (duration varies)</li>
+              <li>Light stretching and fascia work</li>
+              <li>Focus on pre/post ride nutrition</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-nutguidelines">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-nutguidelines')">
+            Nutrition Guidelines
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Protein target:</strong> 1.6g/kg bodyweight (105g for ~64kg)</li>
+              <li><strong>Meal timing:</strong> 4–5 meals/day, 25–40g protein each</li>
+              <li><strong>Pre/post workout nutrition:</strong> See the Nutrition tab for detailed guides</li>
+              <li><strong>Hydration:</strong> 2.5–3L water daily</li>
+              <li><strong>Distribute protein evenly</strong> across meals — anabolic resistance means each meal needs a higher dose to trigger muscle protein synthesis</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supplements">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supplements')">
+            Supplements
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Magnesium glycinate:</strong> 200–400mg before bed (sleep + cortisol)</li>
+              <li><strong>Vitamin D3:</strong> 2000–4000 IU daily (bone density + mood)</li>
+              <li><strong>Omega-3:</strong> 2–3g EPA/DHA daily (anti-inflammatory)</li>
+              <li><strong>Creatine:</strong> 3–5g daily (muscle, brain, bone density benefits for postmenopausal women)</li>
+              <li><strong>Ashwagandha:</strong> 300–600mg daily, KSM-66 extract (cortisol reduction)</li>
+              <li><strong>Collagen peptides:</strong> 10–15g daily (joint + skin support)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-vagus">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-vagus')">
+            Vagus Nerve / Fascia Release
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <h4>Vagus Nerve Stimulation</h4>
+            <ul>
+              <li><strong>Cold water splash</strong> (face/wrists) — 30 seconds</li>
+              <li><strong>Humming/chanting</strong> — 2–3 minutes (vibration stimulates vagus nerve)</li>
+              <li><strong>Deep slow breathing:</strong> 4-7-8 pattern (inhale 4, hold 7, exhale 8)</li>
+            </ul>
+            <h4>Fascia Release</h4>
+            <ul>
+              <li><strong>Foam rolling:</strong> IT band, thoracic spine, hip flexors — 5 min</li>
+              <li><strong>Lacrosse ball:</strong> glutes, plantar fascia — 2 min each</li>
+              <li><strong>Gentle yoga:</strong> cat-cow, child's pose, thread the needle — 5 min</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-habits">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-habits')">
+            Healthy Habits
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Morning:</strong> 10-min walk (cortisol regulation via sunlight)</li>
+              <li><strong>Sleep:</strong> 7–9 hours, cool room, no screens 1hr before</li>
+              <li><strong>Stress:</strong> Journaling, meditation, or creative activity</li>
+              <li><strong>Community:</strong> Social connections reduce cortisol</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-reminders">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-reminders')">
+            Weekly Reminders
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <ul>
+              <li>Take measurements every <strong>Sunday morning</strong></li>
+              <li>Progress photos <strong>monthly</strong></li>
+              <li>Deload every <strong>4th week</strong> (reduce weight by 40%, keep volume)</li>
+              <li>Review and adjust protein target <strong>monthly</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: SUPPLEMENTS -->
+      <div id="tab-supplements" class="tab-content">
+        <h2 class="section-title">Supplements</h2>
+
+        <!-- Daily Check-in -->
+        <div class="card mb-4" id="supplements-checkin">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0">Today's Supplements</h3>
+          </div>
+          <div id="supplements-list"></div>
+        </div>
+
+        <!-- Supplement Accordions -->
+        <h3 class="section-title">Supplement Guide</h3>
+
+        <div class="accordion" id="acc-supp-creatine">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-creatine')">
+            Creatine Monohydrate
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Most evidence-backed supplement for postmenopausal women. Offsets accelerated muscle loss, improves strength, with cognitive and bone benefits. Dose: 3–5g daily.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.thorne.com/products/dp/creatine" target="_blank" rel="noopener">Thorne Creatine</a> — NSF Certified for Sport, top pick</li>
+              <li><a href="https://www.livemomentous.com/products/creatine" target="_blank" rel="noopener">Momentous Creatine</a> — NSF certified</li>
+              <li><a href="https://swolverine.com/products/creatine-monohydrate" target="_blank" rel="noopener">Swolverine Creatine</a> — 100% monohydrate, no fillers</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-magnesium">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-magnesium')">
+            Magnesium Glycinate
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Most postmenopausal women are deficient. Lowers cortisol, improves sleep, reduces cramps, supports bone density. Glycinate form is best absorbed. Dose: 300–400mg before bed.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.thorne.com/products/dp/magnesium-bisglycinate" target="_blank" rel="noopener">Thorne Magnesium Bisglycinate</a> — best-in-class</li>
+              <li><a href="https://www.pureencapsulations.com/magnesium-glycinate.html" target="_blank" rel="noopener">Pure Encapsulations Magnesium Glycinate</a> — hypoallergenic</li>
+              <li><a href="https://www.nowfoods.com/products/supplements/magnesium-glycinate-400-mg-veg-capsules" target="_blank" rel="noopener">NOW Foods Magnesium Glycinate</a> — budget</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-ashwagandha">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-ashwagandha')">
+            Ashwagandha (KSM-66)
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Clinically shown to lower cortisol 20–30%, targets belly fat post-menopause. Supports thyroid, sleep, and strength. Look for KSM-66 extract. Dose: 300–600mg daily with food.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.thorne.com/products/dp/botanical-phytosomes/ashwagandha" target="_blank" rel="noopener">Thorne Ashwagandha</a> — KSM-66, third-party tested</li>
+              <li><a href="https://www.physicians-choice.com/products/ashwagandha" target="_blank" rel="noopener">Physician's Choice Ashwagandha</a> — KSM-66, 1950mg/serving</li>
+              <li><a href="https://nutricost.com/products/nutricost-ashwagandha" target="_blank" rel="noopener">Nutricost Ashwagandha</a> — budget, KSM-66</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-ltheanine">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-ltheanine')">
+            L-Theanine
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Promotes calm focus, blunts cortisol, improves sleep quality. Pairs well with vagus nerve work. Dose: 200mg, once or twice daily.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.livemomentous.com/products/l-theanine" target="_blank" rel="noopener">Momentous L-Theanine</a> — NSF Certified for Sport</li>
+              <li><a href="https://www.pureencapsulations.com/l-theanine.html" target="_blank" rel="noopener">Pure Encapsulations L-Theanine</a> — practitioner-grade</li>
+              <li><a href="https://www.jarrow.com/product/theanine-200-mg" target="_blank" rel="noopener">Jarrow Formulas Theanine</a> — third-party tested, good value</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-omega3">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-omega3')">
+            Omega-3 (EPA/DHA)
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Critical for anti-inflammation, cortisol regulation, joint health for cycling, and cardiovascular and brain support. Aim for 2–3g combined EPA+DHA daily.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.nordicnaturals.com/en/Products/Product_Details/514/?ProdID=1654" target="_blank" rel="noopener">Nordic Naturals Ultimate Omega</a> — Friend of the Sea certified</li>
+              <li><a href="https://www.thorne.com/products/dp/super-epa-dha" target="_blank" rel="noopener">Thorne Omega-3 with CoQ10</a> — adds cardiovascular support</li>
+              <li><a href="https://www.carlsonlabs.com/the-very-finest-fish-oil" target="_blank" rel="noopener">Carlson Labs Very Finest Fish Oil</a> — liquid option</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-vitamind">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-vitamind')">
+            Vitamin D3 + K2
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <p><strong>Why:</strong> Bone density is the primary concern post-menopause — D3 and K2 direct calcium to bones. Most people are still low despite sunshine. Dose: 2000–5000 IU D3 + 100mcg K2 (MK-7 form) with fat.</p>
+            <h4>Recommended Brands</h4>
+            <ul>
+              <li><a href="https://www.transparentlabs.com/products/vitamind3k2" target="_blank" rel="noopener">Transparent Labs D3+K2</a> — top rated</li>
+              <li><a href="https://sportsresearch.com/products/vitamin-d3-k2" target="_blank" rel="noopener">Sports Research D3+K2</a> — third-party tested, affordable</li>
+              <li><a href="https://www.nowfoods.com/products/supplements/vitamin-d-3-k-2" target="_blank" rel="noopener">NOW Foods D3+K2</a> — budget</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-combos">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-combos')">
+            Smart Combos (Fewer Bottles)
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <h4>Omega-3 + D3 + K2</h4>
+            <ul>
+              <li><a href="https://www.thepauselife.com" target="_blank" rel="noopener">The Pause Life</a> — designed for postmenopausal women by Dr. Mary Claire Haver, NSF certified</li>
+              <li><a href="https://www.wileysfinest.com" target="_blank" rel="noopener">Wiley's Finest</a> — MenaQ7 K2, 1 softgel/day</li>
+            </ul>
+            <h4>Magnesium + L-Theanine</h4>
+            <ul>
+              <li><a href="https://www.newchapter.com" target="_blank" rel="noopener">New Chapter Magnesium + L-Theanine Powder</a> — 325mg mag + 200mg L-theanine, evening wind-down</li>
+            </ul>
+            <h4>Magnesium + Ashwagandha</h4>
+            <ul>
+              <li><a href="https://www.newchapter.com" target="_blank" rel="noopener">New Chapter Magnesium + Ashwagandha Tablet</a> — one-daily, 325mg mag + ashwagandha</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion" id="acc-supp-priority">
+          <button class="accordion-trigger" onclick="toggleAccordion('acc-supp-priority')">
+            Priority Order
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>1. Creatine</strong> — non-negotiable for muscle preservation</li>
+              <li><strong>2. Magnesium</strong> — most women deficient, affects sleep/cortisol/recovery</li>
+              <li><strong>3. Omega-3</strong> — anti-inflammatory</li>
+              <li><strong>4. Ashwagandha</strong> — cortisol-driven belly fat</li>
+              <li><strong>5. D3+K2</strong> — bone density long game</li>
+              <li><strong>6. L-Theanine</strong> — additional cortisol/nervous system support</li>
+            </ul>
+            <p class="guide-note">Thorne is the most consistent brand across all categories for simplicity.</p>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Mobile Bottom Tabs -->
+    <nav class="mobile-tabs">
+      <button class="mobile-tab active" data-tab="today">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        Today
+      </button>
+      <button class="mobile-tab" data-tab="nutrition">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        Nutrition
+      </button>
+      <button class="mobile-tab" data-tab="progress">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Progress
+      </button>
+      <button class="mobile-tab" data-tab="program">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Program
+      </button>
+      <button class="mobile-tab" data-tab="supplements">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          <line x1="12" y1="15" x2="12" y2="17"/>
+        </svg>
+        Supplements
+      </button>
+    </nav>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
