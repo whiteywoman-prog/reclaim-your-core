@@ -578,6 +578,7 @@ function renderNutrition() {
   $('#fatTargetInput').value = settings.fatTarget || 57;
 
   renderQuickAddGrid();
+  renderMyFoodsGrid();
   renderMealLog();
 }
 
@@ -652,6 +653,75 @@ function renderQuickAddGrid() {
   });
 }
 
+// ── My Foods (saved custom entries) ──
+function getMyFoods() {
+  return LS.get('myFoods') || [];
+}
+function saveMyFoods(foods) {
+  LS.set('myFoods', foods);
+}
+function addToMyFoods(name, protein, calories, carbs, fat) {
+  const foods = getMyFoods();
+  const existing = foods.find(f => f.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    existing.protein = protein;
+    existing.calories = calories;
+    existing.carbs = carbs;
+    existing.fat = fat;
+    existing.uses = (existing.uses || 1) + 1;
+  } else {
+    foods.push({ name, protein, calories, carbs, fat, uses: 1 });
+  }
+  saveMyFoods(foods);
+}
+function removeFromMyFoods(index) {
+  const foods = getMyFoods();
+  foods.splice(index, 1);
+  saveMyFoods(foods);
+  renderMyFoodsGrid();
+}
+function renderMyFoodsGrid() {
+  const foods = getMyFoods().sort((a, b) => (b.uses || 1) - (a.uses || 1));
+  const grid = $('#myFoodsGrid');
+  const empty = $('#myFoodsEmpty');
+  if (foods.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  let html = '';
+  foods.forEach((food, i) => {
+    html += `
+      <button class="quick-add-btn my-food-btn" data-food="${food.name}" data-protein="${food.protein}" data-calories="${food.calories}" data-carbs="${food.carbs}" data-fat="${food.fat}" data-idx="${i}">
+        ${food.name}
+        <span class="quick-add-grams">${food.protein}g protein</span>
+        <span class="my-food-remove" data-idx="${i}" aria-label="Remove">&times;</span>
+      </button>
+    `;
+  });
+  grid.innerHTML = html;
+
+  $$('.my-food-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.classList.contains('my-food-remove')) return;
+      addNutritionEntry(
+        btn.dataset.food,
+        parseInt(btn.dataset.protein) || 0,
+        parseInt(btn.dataset.calories) || 0,
+        parseInt(btn.dataset.carbs) || 0,
+        parseInt(btn.dataset.fat) || 0
+      );
+    });
+  });
+  $$('.my-food-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFromMyFoods(parseInt(btn.dataset.idx));
+    });
+  });
+}
+
 function renderMealLog() {
   const data = getNutritionData();
   if (data.entries.length === 0) {
@@ -687,6 +757,8 @@ $('#customAddBtn').addEventListener('click', () => {
   const fat = parseInt($('#customFoodFat').value) || 0;
   if (name && (calories > 0 || protein > 0 || carbs > 0 || fat > 0)) {
     addNutritionEntry(name, protein, calories, carbs, fat);
+    addToMyFoods(name, protein, calories, carbs, fat);
+    renderMyFoodsGrid();
     $('#customFoodName').value = '';
     $('#customFoodCalories').value = '';
     $('#customFoodProtein').value = '';
