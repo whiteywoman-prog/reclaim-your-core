@@ -50,11 +50,20 @@
         <h2 class="section-title" id="today-date"></h2>
         <div class="kpi-grid" id="kpi-grid"></div>
 
+        <!-- Travel Mode Controls -->
+        <div class="travel-controls">
+          <div id="travel-banner" class="travel-banner" style="display:none">
+            ✈️ Travel Mode: ON &mdash; Bodyweight &amp; mini-band workouts active. Program week is paused.
+          </div>
+          <button id="travelModeBtn" class="btn-travel" onclick="toggleTravelMode()">✈ Travel Mode</button>
+        </div>
+
         <div class="card" id="workout-card">
           <div class="card-header">
             <h3 class="section-title" style="margin-bottom:0" id="workout-title">Today's Workout</h3>
           </div>
           <div id="workout-exercises"></div>
+          <div class="workout-action-row" id="workout-action-row"></div>
         </div>
 
         <div class="card">
@@ -62,6 +71,14 @@
             <h3 class="section-title" style="margin-bottom:0">Daily Habits</h3>
           </div>
           <div id="habits-list"></div>
+        </div>
+
+        <!-- Workout History -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0">Workout History</h3>
+          </div>
+          <div id="workout-history-section"></div>
         </div>
       </div>
 
@@ -286,7 +303,7 @@
           <div class="measurement-row">
             <div class="measurement-field">
               <label>Weight (lbs)</label>
-              <input type="number" id="weightInput" step="0.1" placeholder="e.g. 176">
+              <input type="number" id="weightInput" step="0.1" placeholder="e.g. 140">
             </div>
             <div class="measurement-field">
               <label>Waist (inches)</label>
@@ -301,17 +318,21 @@
 
         <div class="card">
           <h3 class="section-title">Strength Progress</h3>
+          <p class="section-note">Weights auto-tracked from your logged workouts. All weighted exercises tracked below.</p>
+          <div style="overflow-x:auto;">
           <table class="lift-table">
             <thead>
               <tr>
-                <th>Lift</th>
-                <th>Current (lbs)</th>
+                <th>Exercise</th>
+                <th>Current</th>
                 <th>Previous</th>
+                <th>Trend</th>
               </tr>
             </thead>
             <tbody id="liftTableBody"></tbody>
           </table>
-          <div style="margin-top: var(--space-3);">
+          </div>
+          <div style="margin-top: var(--space-3); display:none;">
             <button class="btn-primary" id="saveLiftsBtn">Save Lifts</button>
           </div>
           <div class="chart-container mt-4">

@@ -1174,3 +1174,189 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: space-between;
 }
+
+/* ── v2: Travel Mode ── */
+.travel-controls {
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.travel-banner {
+  background: var(--color-terra);
+  color: #fff;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: center;
+}
+
+.btn-travel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+.btn-travel:hover { background: var(--color-surface-alt); }
+.btn-travel.travel-mode-active {
+  background: var(--color-terra);
+  color: #fff;
+  border-color: var(--color-terra);
+}
+
+/* ── v2: Skip / Mark Complete buttons ── */
+.workout-action-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-3) 0 var(--space-2);
+  flex-wrap: wrap;
+}
+
+.btn-skip {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-skip:hover:not([disabled]) { background: var(--color-surface-alt); }
+.btn-skip[disabled] { opacity: 0.5; cursor: default; }
+
+.btn-complete {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-teal);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-complete:hover { opacity: 0.88; }
+
+.workout-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ── v2: Workout History ── */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+.history-row:last-of-type { border-bottom: none; }
+
+.history-date {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  min-width: 64px;
+}
+.history-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+.history-expand-btn {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.history-expand-btn:hover { background: var(--color-surface-alt); }
+
+.history-detail {
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+}
+.history-detail-inner {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+.history-ex-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.history-ex-table th, .history-ex-table td {
+  padding: 4px 8px;
+  text-align: left;
+}
+.history-ex-table thead { color: var(--color-text-muted); font-weight: 600; }
+
+/* ── v2: Lift table badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.badge-done {
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+}
+.badge-skipped {
+  background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+  color: var(--color-text-muted);
+}
+.badge-partial {
+  background: color-mix(in srgb, var(--color-terra) 15%, transparent);
+  color: var(--color-terra);
+}
+
+/* ── v2: Lift Table Trend Arrows ── */
+.trend-up   { color: var(--color-success); font-weight: 700; }
+.trend-down { color: var(--color-terra); font-weight: 700; }
+.trend-neutral { color: var(--color-text-muted); }
+
+.lift-section-header td {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* ── v2: Section note ── */
+.section-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+  margin-top: calc(-1 * var(--space-2));
+}

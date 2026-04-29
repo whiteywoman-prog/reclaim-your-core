@@ -79,30 +79,81 @@ tabButtons.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.ta
 
 // ── Settings ──
 function getSettings() {
-  return LS.get('settings') || {
+  const defaults = {
     proteinTarget: 105,
     caloriesTarget: 1700,
     carbsTarget: 170,
     fatTarget: 57,
     bodyWeight: 140,
-    startDate: todayKey()
+    startDate: todayKey(),
+    travelMode: false,
+    workoutPointer: 1,
   };
+  const saved = LS.get('settings');
+  return saved ? Object.assign({}, defaults, saved) : defaults;
 }
 function saveSettings(s) { LS.set('settings', s); }
 
 // ── Program Week ──
 function getProgramWeek() {
+  const settings = getSettings();
+  if (settings.travelMode && settings.travelStartWeek) {
+    return settings.travelStartWeek;
+  }
   return LS.get('programWeek') || 1;
 }
 function setProgramWeek(w) { LS.set('programWeek', Math.max(1, Math.min(12, w))); }
+
+function toggleTravelMode() {
+  const settings = getSettings();
+  if (!settings.travelMode) {
+    // Turning ON — capture week BEFORE setting flag
+    settings.travelStartWeek = getProgramWeek();
+    settings.travelStartDate = todayKey();
+    settings.travelMode = true;
+  } else {
+    // Turning OFF — shift startDate forward by elapsed travel days
+    const today = new Date();
+    const start = new Date(settings.travelStartDate);
+    const daysElapsed = Math.round((today - start) / 86400000);
+    const startDate = new Date(settings.startDate);
+    startDate.setDate(startDate.getDate() + daysElapsed);
+    settings.startDate = startDate.getFullYear() + '-' + String(startDate.getMonth()+1).padStart(2,'0') + '-' + String(startDate.getDate()).padStart(2,'0');
+    settings.travelMode = false;
+    delete settings.travelStartWeek;
+    delete settings.travelStartDate;
+  }
+  saveSettings(settings);
+  renderToday();
+  const banner = document.getElementById('travel-banner');
+  if (banner) banner.style.display = settings.travelMode ? '' : 'none';
+  updateTravelBtn();
+}
+
+function updateTravelBtn() {
+  const btn = document.getElementById('travelModeBtn');
+  const banner = document.getElementById('travel-banner');
+  if (!btn) return;
+  const settings = getSettings();
+  if (settings.travelMode) {
+    btn.textContent = 'Exit Travel Mode';
+    btn.classList.add('travel-mode-active');
+    if (banner) banner.style.display = '';
+  } else {
+    btn.textContent = '✈ Travel Mode';
+    btn.classList.remove('travel-mode-active');
+    if (banner) banner.style.display = 'none';
+  }
+}
 
 // ── Workout Data ──
 const WORKOUTS = {
   1: { // Monday — Upper Push
     name: 'Upper Body Push',
     exercises: [
-      // Warm-up (8 min)
-      { name: 'Foam Roll Thoracic Spine + Lats', sets: '2 min', section: 'warmup' },
+      // Warm-up
+      { name: 'Aletha Range — Upper Traps + Pecs', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Foam Roll Thoracic Spine (broad)', sets: '2 min', section: 'warmup' },
       { name: 'Band Pull-Aparts', sets: '2×15', section: 'warmup' },
       { name: 'Arm Circles + Shoulder CARs', sets: '2 min', section: 'warmup' },
       // Main Lifts — Heavy, 3–5 reps
@@ -119,8 +170,9 @@ const WORKOUTS = {
   2: { // Tuesday — Lower Body (Quad/Glute Focus)
     name: 'Lower Body (Quad/Glute)',
     exercises: [
-      // Warm-up (8 min)
-      { name: 'Foam Roll Quads, Adductors, Glutes', sets: '3 min', section: 'warmup' },
+      // Warm-up
+      { name: 'Aletha Mark — Hip Flexors / Psoas', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Aletha Orbit — Glutes + Piriformis', sets: '90 sec each side', section: 'warmup' },
       { name: 'Bodyweight Squats', sets: '2×10', section: 'warmup' },
       { name: 'Banded Glute Bridges', sets: '2×15', section: 'warmup' },
       // Main Lifts
@@ -146,16 +198,19 @@ const WORKOUTS = {
       { name: 'Pallof Press', sets: '3×10 each', section: 'main' },
       { name: 'Bird Dogs', sets: '3×10 each', section: 'main' },
       // Fascia Release
-      { name: 'Foam Roll IT Band + Thoracic Spine', sets: '5 min', section: 'accessory' },
-      { name: 'Lacrosse Ball — Glutes + Plantar Fascia', sets: '4 min', section: 'accessory' },
+      { name: 'Aletha Mark — Hip Flexors / Psoas', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Aletha Orbit — Piriformis + Glutes', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Aletha Range — Upper Traps + Suboccipitals', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Foam Roll IT Band + Thoracic Spine (broad)', sets: '5 min', section: 'accessory' },
       { name: 'Gentle Yoga (Cat-Cow, Child\'s Pose, Thread the Needle)', sets: '5 min', section: 'finisher' },
     ]
   },
   4: { // Thursday — Upper Pull
     name: 'Upper Body Pull',
     exercises: [
-      // Warm-up (8 min)
-      { name: 'Foam Roll Lats + Pecs', sets: '2 min', section: 'warmup' },
+      // Warm-up
+      { name: 'Aletha Range — Upper Traps + Suboccipitals', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Foam Roll Lats (broad)', sets: '2 min', section: 'warmup' },
       { name: 'Band Pull-Aparts', sets: '2×15', section: 'warmup' },
       { name: 'Scapular Wall Slides', sets: '2×10', section: 'warmup' },
       // Main Lifts
@@ -172,8 +227,9 @@ const WORKOUTS = {
   5: { // Friday — Lower Body (Hinge/Posterior Chain)
     name: 'Lower Body (Hinge/Posterior)',
     exercises: [
-      // Warm-up (8 min)
-      { name: 'Foam Roll Hamstrings, Calves, Piriformis', sets: '3 min', section: 'warmup' },
+      // Warm-up
+      { name: 'Aletha Mark — Hip Flexors / Psoas', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Aletha Orbit — Glutes + Piriformis', sets: '90 sec each side', section: 'warmup' },
       { name: 'Hip 90/90 Mobility', sets: '2×5 each side', section: 'warmup' },
       { name: 'Banded Monster Walks', sets: '2×12 each direction', section: 'warmup' },
       // Main Lifts
@@ -185,6 +241,83 @@ const WORKOUTS = {
       { name: 'Standing Calf Raises', sets: '3×12–15', section: 'accessory' },
       // Finisher
       { name: 'Hanging Leg Raises', sets: '3×8–10', section: 'finisher' },
+    ]
+  }
+};
+
+// ── Travel Workouts ──
+const TRAVEL_WORKOUTS = {
+  1: { // Monday — Upper Push (Travel)
+    name: 'Travel — Upper Push',
+    exercises: [
+      { name: 'Aletha Range — Upper Traps + Pecs', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Band Pull-Aparts', sets: '2×15', section: 'warmup' },
+      { name: 'Arm Circles + Shoulder CARs', sets: '2 min', section: 'warmup' },
+      { name: 'Push-ups (or Decline Push-ups)', sets: '4×10–15', section: 'main' },
+      { name: 'Pike Push-ups (shoulder focus)', sets: '4×8–12', section: 'main' },
+      { name: 'Banded Chest Press', sets: '3×12–15', section: 'accessory' },
+      { name: 'Banded Lateral Raises', sets: '3×12–15', section: 'accessory' },
+      { name: 'Tricep Dips on Chair', sets: '3×8–12', section: 'accessory' },
+      { name: 'Plank Hold', sets: '3×30–45s', section: 'finisher' },
+    ]
+  },
+  2: { // Tuesday — Lower Body (Travel)
+    name: 'Travel — Lower Body (Quad/Glute)',
+    exercises: [
+      { name: 'Aletha Mark — Hip Flexors', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Aletha Orbit — Glutes', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Bodyweight Squats', sets: '2×10', section: 'warmup' },
+      { name: 'Banded Glute Bridges', sets: '2×15', section: 'warmup' },
+      { name: 'Bulgarian Split Squat (bodyweight)', sets: '4×10–12 each', section: 'main' },
+      { name: 'Goblet Squat (suitcase or backpack)', sets: '4×12–15', section: 'main' },
+      { name: 'Banded Lateral Walks', sets: '3×15 each direction', section: 'accessory' },
+      { name: 'Single-Leg Glute Bridge', sets: '3×10 each', section: 'accessory' },
+      { name: 'Banded Clamshells', sets: '3×15 each side', section: 'accessory' },
+      { name: 'Pallof Press (banded)', sets: '3×10 each side', section: 'finisher' },
+    ]
+  },
+  3: { // Wednesday — Active Recovery (Travel)
+    name: 'Active Recovery — Vagus + Fascia',
+    exercises: [
+      { name: 'Cold Water Face Splash', sets: '30 sec', section: 'warmup' },
+      { name: 'Deep Breathing (4-7-8 Pattern)', sets: '3 min', section: 'warmup' },
+      { name: 'Humming / Chanting', sets: '2–3 min', section: 'warmup' },
+      { name: 'Planks', sets: '3×30–60s', section: 'main' },
+      { name: 'Pallof Press (banded)', sets: '3×10 each', section: 'main' },
+      { name: 'Bird Dogs', sets: '3×10 each', section: 'main' },
+      { name: 'Aletha Mark — Hip Flexors / Psoas', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Aletha Orbit — Piriformis + Glutes', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Aletha Range — Neck + Shoulders', sets: '90 sec each side', section: 'accessory' },
+      { name: 'Gentle Yoga (Cat-Cow, Child\'s Pose, Thread the Needle)', sets: '5 min', section: 'finisher' },
+    ]
+  },
+  4: { // Thursday — Upper Pull (Travel)
+    name: 'Travel — Upper Pull',
+    exercises: [
+      { name: 'Aletha Range — Upper Traps + Suboccipitals', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Band Pull-Aparts', sets: '2×15', section: 'warmup' },
+      { name: 'Scapular Wall Slides', sets: '2×10', section: 'warmup' },
+      { name: 'Banded Pull-Aparts (heavy band)', sets: '4×12–15', section: 'main' },
+      { name: 'Banded Bent-Over Row', sets: '4×10–12', section: 'main' },
+      { name: 'Banded Lat Pulldown (anchor band high)', sets: '3×10–12', section: 'accessory' },
+      { name: 'Banded Face Pulls', sets: '3×12–15', section: 'accessory' },
+      { name: 'Banded Bicep Curls', sets: '3×10–12', section: 'accessory' },
+      { name: 'Dead Bug', sets: '3×8 each side', section: 'finisher' },
+    ]
+  },
+  5: { // Friday — Lower Body Hinge (Travel)
+    name: 'Travel — Lower Body (Hinge/Posterior)',
+    exercises: [
+      { name: 'Aletha Mark — Hip Flexors', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Aletha Orbit — Glutes', sets: '90 sec each side', section: 'warmup' },
+      { name: 'Hip 90/90 Mobility', sets: '2×5 each side', section: 'warmup' },
+      { name: 'Banded Monster Walks', sets: '2×12 each direction', section: 'warmup' },
+      { name: 'Single-Leg RDL (bodyweight or suitcase)', sets: '4×10 each', section: 'main' },
+      { name: 'Banded Good Mornings', sets: '4×12–15', section: 'main' },
+      { name: 'Banded Hip Thrusts', sets: '3×15', section: 'accessory' },
+      { name: 'Glute Bridge March', sets: '3×10 each', section: 'accessory' },
+      { name: 'Standing Calf Raises', sets: '3×15–20', section: 'accessory' },
+      { name: 'Hanging Leg Raises (or Reverse Crunch)', sets: '3×10', section: 'finisher' },
     ]
   }
 };
@@ -248,15 +381,23 @@ function renderToday() {
   // KPI
   renderKPIs();
 
+  // Travel mode UI update
+  updateTravelBtn();
+
   // Workout
   if (dayOfWeek === 0 || dayOfWeek === 6) {
     renderCyclingDay();
   } else {
-    renderWorkout(dayOfWeek);
+    const settings = getSettings();
+    const workoutId = settings.workoutPointer || 1;
+    renderWorkout(workoutId);
   }
 
   // Habits
   renderHabits();
+
+  // History
+  renderWorkoutHistory();
 }
 
 function renderKPIs() {
@@ -314,8 +455,20 @@ function countWorkoutsThisWeek() {
   return count;
 }
 
-function renderWorkout(dayOfWeek) {
-  const workout = WORKOUTS[dayOfWeek];
+// ── Bodyweight / Finisher Weight Helpers ──
+function isBodyweightExercise(name) {
+  const bw = ['Foam Roll', 'Vagus', 'Bird Dog', 'Bodyweight', 'Banded', 'Band Pull', 'Arm Circle', 'Scapular', 'Hip 90', 'Monster Walk', 'Cold Water', 'Deep Breathing', 'Humming', 'Lacrosse', 'Gentle Yoga', 'Aletha', 'Push-up', 'Pike Push', 'Tricep Dip', 'Bodyweight Squat', 'Single-Leg Glute'];
+  return bw.some(kw => name.includes(kw));
+}
+
+function finisherUsesWeight(name) {
+  return ['Plank Hold', 'Hanging Leg', 'Dead Bug', 'Pallof'].some(kw => name.includes(kw));
+}
+
+function renderWorkout(workoutId) {
+  const settings = getSettings();
+  const workoutSet = settings.travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
+  const workout = workoutSet[workoutId];
   if (!workout) return;
 
   const key = todayKey();
@@ -323,37 +476,40 @@ function renderWorkout(dayOfWeek) {
   const saved = workouts[key] || { exercises: {}, completed: false };
 
   $('#workout-title').textContent = workout.name;
-  let html = '';
-  let lastSection = '';
+
+  // Section labels — workout 3 (Active Recovery) uses different labels
   const sectionLabels = {
     warmup: 'Warm-up',
     main: 'Main Lifts — Heavy',
     accessory: 'Accessory Work',
     finisher: 'Finisher',
   };
-  // Wednesday has different section labels
   const wedLabels = {
     warmup: 'Vagus Nerve Reset',
     main: 'Core Work',
     accessory: 'Fascia Release',
     finisher: 'Cool Down',
   };
-  const labels = dayOfWeek === 3 ? wedLabels : sectionLabels;
+  const isRecovery = workout.name.includes('Recovery') || workout.name.includes('Vagus');
+  const labels = isRecovery ? wedLabels : sectionLabels;
 
+  let html = '';
+  let lastSection = '';
   workout.exercises.forEach((ex, i) => {
     const exKey = 'ex_' + i;
     const checked = saved.exercises[exKey]?.done ? 'checked' : '';
     const weight = saved.exercises[exKey]?.weight || '';
     const section = ex.section || 'main';
 
-    // Section header
     if (section !== lastSection) {
       html += `<div class="exercise-section-label">${labels[section] || section}</div>`;
       lastSection = section;
     }
 
-    // Only show weight input for main lifts and accessory work (not warmup/finisher)
-    const showWeight = (section === 'main' || section === 'accessory') && !isBodyweightExercise(ex.name);
+    // Show weight input for main/accessory (not BW) + specific weighted finishers
+    const showWeight = (section === 'main' || section === 'accessory' ||
+      (section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
+
     html += `
       <div class="exercise-item ${section === 'warmup' ? 'exercise-warmup' : ''} ${section === 'finisher' ? 'exercise-finisher' : ''}">
         <input type="checkbox" class="exercise-check" data-ex="${exKey}" ${checked}>
@@ -372,9 +528,42 @@ function renderWorkout(dayOfWeek) {
   $('#workout-exercises').innerHTML = html;
   $('#workout-card').style.display = '';
 
-  function isBodyweightExercise(name) {
-    const bw = ['Plank', 'Foam Roll', 'Vagus', 'Bird Dog', 'Pallof', 'Dead Bug', 'Hanging Leg', 'Bodyweight', 'Banded', 'Band Pull', 'Arm Circle', 'Scapular', 'Hip 90', 'Monster Walk', 'Cold Water', 'Deep Breathing', 'Humming', 'Lacrosse', 'Gentle Yoga'];
-    return bw.some(kw => name.includes(kw));
+  // Skip / Mark Complete buttons
+  const actionRow = document.getElementById('workout-action-row');
+  if (actionRow) {
+    const skippedDays = LS.get('skipped_days') || {};
+    const alreadySkipped = !!skippedDays[key];
+    const alreadyComplete = saved.completed;
+    actionRow.innerHTML = alreadyComplete
+      ? `<span class="workout-complete-badge">✓ Workout Complete</span>`
+      : `
+        <button class="btn-skip" id="skipDayBtn" ${alreadySkipped ? 'disabled' : ''}>${alreadySkipped ? 'Day Skipped' : 'Skip Day'}</button>
+        <button class="btn-complete" id="markCompleteBtn">Mark Complete</button>
+      `;
+    if (!alreadyComplete) {
+      const skipBtn = document.getElementById('skipDayBtn');
+      const completeBtn = document.getElementById('markCompleteBtn');
+      if (skipBtn && !alreadySkipped) {
+        skipBtn.addEventListener('click', () => {
+          if (confirm('Skip today\'s workout? The same workout will queue for your next gym day.')) {
+            const sk = LS.get('skipped_days') || {};
+            sk[key] = { workoutId: settings.workoutPointer };
+            LS.set('skipped_days', sk);
+            renderWorkout(workoutId);
+          }
+        });
+      }
+      if (completeBtn) {
+        completeBtn.addEventListener('click', () => {
+          saveWorkoutState(true);
+          // Advance pointer
+          const s = getSettings();
+          s.workoutPointer = (s.workoutPointer % 5) + 1;
+          saveSettings(s);
+          renderWorkout(workoutId);
+        });
+      }
+    }
   }
 
   // Event listeners
@@ -387,7 +576,7 @@ function renderWorkout(dayOfWeek) {
   });
 }
 
-function saveWorkoutState() {
+function saveWorkoutState(forceComplete) {
   const key = todayKey();
   const workouts = LS.get('workouts') || {};
   const exercises = {};
@@ -403,7 +592,7 @@ function saveWorkoutState() {
     if (!cb.checked) allDone = false;
   });
 
-  workouts[key] = { exercises, completed: allDone };
+  workouts[key] = { exercises, completed: forceComplete || allDone };
   LS.set('workouts', workouts);
 }
 
@@ -454,6 +643,112 @@ function getHabitsData() {
   const allHabits = LS.get('habits') || {};
   const todayHabits = allHabits[key] || {};
   return HABITS.map((h, i) => ({ name: h, done: !!todayHabits['h_' + i] }));
+}
+
+// ── Workout History ──
+function getWorkoutName(workoutId, travelMode) {
+  const ws = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
+  return (ws[workoutId] && ws[workoutId].name) || 'Workout ' + workoutId;
+}
+
+function renderWorkoutHistory() {
+  const histSection = document.getElementById('workout-history-section');
+  if (!histSection) return;
+
+  const workouts = LS.get('workouts') || {};
+  const skipped = LS.get('skipped_days') || {};
+
+  // Build last 14 days
+  const rows = [];
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const wo = workouts[key];
+    const sk = skipped[key];
+    if (!wo && !sk) continue;
+    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    const dateLabel = dayName + ' ' + (d.getMonth()+1) + '/' + d.getDate();
+    rows.push({ key, dateLabel, wo, sk });
+  }
+
+  if (rows.length === 0) {
+    histSection.innerHTML = '<div class="empty-state" style="font-size:13px;">No workout history yet</div>';
+    return;
+  }
+
+  let html = '';
+  rows.forEach(({ key, dateLabel, wo, sk }) => {
+    let statusBadge = '';
+    let workoutLabel = '';
+    if (sk) {
+      statusBadge = '<span class="badge badge-skipped">Skipped</span>';
+      workoutLabel = sk.workoutId ? getWorkoutName(sk.workoutId, false) : 'Workout';
+    } else if (wo && wo.completed) {
+      statusBadge = '<span class="badge badge-done">✓ Done</span>';
+      workoutLabel = wo.workoutName || 'Workout';
+    } else if (wo) {
+      const total = Object.keys(wo.exercises || {}).length;
+      const done = Object.values(wo.exercises || {}).filter(e => e.done).length;
+      statusBadge = `<span class="badge badge-partial">${done}/${total}</span>`;
+      workoutLabel = wo.workoutName || 'Workout';
+    }
+    html += `
+      <div class="history-row" data-key="${key}">
+        <span class="history-date">${dateLabel}</span>
+        <span class="history-name">${workoutLabel}</span>
+        ${statusBadge}
+        <button class="history-expand-btn" data-key="${key}">${document.getElementById('hist-detail-' + key) ? '▴ Hide' : '▾ View'}</button>
+      </div>
+      <div class="history-detail" id="hist-detail-${key}" style="display:none"></div>
+    `;
+  });
+  histSection.innerHTML = html;
+
+  // Attach expand buttons
+  histSection.querySelectorAll('.history-expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => toggleHistoryDetail(btn.dataset.key, btn));
+  });
+}
+
+function toggleHistoryDetail(key, btn) {
+  const detail = document.getElementById('hist-detail-' + key);
+  if (!detail) return;
+  const isOpen = detail.style.display !== 'none';
+  if (isOpen) {
+    detail.style.display = 'none';
+    btn.textContent = '▾ View';
+    return;
+  }
+  // Build detail view
+  const workouts = LS.get('workouts') || {};
+  const skipped = LS.get('skipped_days') || {};
+  const wo = workouts[key];
+  const sk = skipped[key];
+  if (sk) {
+    detail.innerHTML = '<div class="history-detail-inner"><em>Day was skipped.</em></div>';
+  } else if (wo) {
+    // Find the workout exercises — we'll re-render a simplified view
+    let inner = '<div class="history-detail-inner">';
+    const exEntries = Object.entries(wo.exercises || {});
+    if (exEntries.length === 0) {
+      inner += '<em>No exercise data saved.</em>';
+    } else {
+      inner += '<table class="history-ex-table"><thead><tr><th>Exercise</th><th>Weight</th><th>Done</th></tr></thead><tbody>';
+      exEntries.forEach(([exKey, ex]) => {
+        inner += `<tr>
+          <td>${exKey}</td>
+          <td>${ex.weight ? ex.weight + ' lbs' : '—'}</td>
+          <td>${ex.done ? '✓' : '–'}</td>
+        </tr>`;
+      });
+      inner += '</tbody></table>';
+    }
+    inner += '</div>';
+    detail.innerHTML = inner;
+  }
+  detail.style.display = '';
+  btn.textContent = '▴ Hide';
 }
 
 // ── NUTRITION Tab (full macros) ──
@@ -1006,29 +1301,146 @@ function drawMeasurementChart() {
   }
 }
 
+// ── Auto-derive all weighted exercises from WORKOUTS ──
+function getAllWeightedExercises() {
+  const set = new Set();
+  Object.values(WORKOUTS).forEach(w => {
+    w.exercises.forEach(ex => {
+      const show = (ex.section === 'main' || ex.section === 'accessory' ||
+        (ex.section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
+      if (show) set.add(ex.name);
+    });
+  });
+  return Array.from(set);
+}
+
+// Build per-exercise weight history from saved workouts
+function getLiftHistoryAuto() {
+  const workouts = LS.get('workouts') || {};
+  const history = {}; // { exerciseName: [{date, weight}, ...] }
+
+  // We need to map exKey index -> exercise name per workout id
+  // Workout entries don't currently store which workout was rendered,
+  // so we cross-reference by matching weights across all WORKOUTS
+  const allExByWorkout = {};
+  [WORKOUTS, TRAVEL_WORKOUTS].forEach(ws => {
+    Object.values(ws).forEach(w => {
+      w.exercises.forEach((ex, i) => {
+        const show = (ex.section === 'main' || ex.section === 'accessory' ||
+          (ex.section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
+        if (!show) return;
+        const exKey = 'ex_' + i;
+        if (!allExByWorkout[w.name]) allExByWorkout[w.name] = {};
+        allExByWorkout[w.name][exKey] = ex.name;
+      });
+    });
+  });
+
+  // For each saved workout day, try to attribute weights to exercise names
+  Object.entries(workouts).sort(([a],[b]) => a.localeCompare(b)).forEach(([date, wo]) => {
+    if (!wo || !wo.exercises) return;
+    // Try each workout definition to find one whose key count matches this saved workout
+    const savedKeys = Object.keys(wo.exercises);
+    // Match by finding a workout whose total exercise count is >= max index in saved keys
+    // Best heuristic: use the workout that has the most matching indices with weight > 0
+    let bestWorkoutExMap = null;
+    let bestScore = -1;
+    Object.values(allExByWorkout).forEach(exMap => {
+      const score = savedKeys.filter(k => exMap[k]).length;
+      if (score > bestScore) { bestScore = score; bestWorkoutExMap = exMap; }
+    });
+    if (!bestWorkoutExMap) return;
+    savedKeys.forEach(exKey => {
+      const ex = wo.exercises[exKey];
+      if (!ex || !ex.weight || ex.weight <= 0) return;
+      const name = bestWorkoutExMap[exKey];
+      if (!name) return;
+      if (!history[name]) history[name] = [];
+      history[name].push({ date, weight: ex.weight });
+    });
+  });
+
+  return history;
+}
+
 function renderLiftTable() {
-  const lifts = LS.get('lifts') || {};
-  const keys = Object.keys(lifts).sort();
-  const latest = keys.length > 0 ? lifts[keys[keys.length - 1]] : {};
-  const prev = keys.length > 1 ? lifts[keys[keys.length - 2]] : {};
+  const allExercises = getAllWeightedExercises();
+  const history = getLiftHistoryAuto();
+
+  // Also include legacy manually-entered lifts
+  const legacyLifts = LS.get('lifts') || {};
+  const legacyKeys = Object.keys(legacyLifts).sort();
+
+  // Determine section grouping per exercise
+  const sectionMap = {}; // name -> section
+  Object.values(WORKOUTS).forEach(w => {
+    w.exercises.forEach(ex => {
+      if (!sectionMap[ex.name]) sectionMap[ex.name] = ex.section;
+    });
+  });
+
+  // Group exercises
+  const mainExs = allExercises.filter(n => sectionMap[n] === 'main');
+  const accessoryExs = allExercises.filter(n => sectionMap[n] === 'accessory');
+  const finisherExs = allExercises.filter(n => sectionMap[n] === 'finisher' && finisherUsesWeight(n));
+
+  function buildRows(names) {
+    return names.map(name => {
+      const hist = history[name] || [];
+      const cur = hist.length > 0 ? hist[hist.length - 1].weight : null;
+      const prev = hist.length > 1 ? hist[hist.length - 2].weight : null;
+
+      // Also check legacy manual lifts
+      const lKey = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z_]/g,'');
+      let legacyCur = null, legacyPrev = null;
+      if (legacyKeys.length > 0) {
+        const ll = legacyLifts[legacyKeys[legacyKeys.length - 1]];
+        const lp = legacyKeys.length > 1 ? legacyLifts[legacyKeys[legacyKeys.length - 2]] : {};
+        legacyCur = ll && ll[lKey] ? ll[lKey] : null;
+        legacyPrev = lp && lp[lKey] ? lp[lKey] : null;
+      }
+      const finalCur = cur || legacyCur;
+      const finalPrev = prev || legacyPrev;
+
+      let trend = '<span class="trend-neutral">—</span>';
+      if (finalCur && finalPrev) {
+        if (finalCur > finalPrev) trend = '<span class="trend-up">↑</span>';
+        else if (finalCur < finalPrev) trend = '<span class="trend-down">↓</span>';
+        else trend = '<span class="trend-neutral">—</span>';
+      }
+      return `<tr>
+        <td>${name}</td>
+        <td>${finalCur ? finalCur + ' lb' : '—'}</td>
+        <td class="text-muted">${finalPrev ? finalPrev + ' lb' : '—'}</td>
+        <td>${trend}</td>
+      </tr>`;
+    }).join('');
+  }
 
   let html = '';
-  LIFTS.forEach(lift => {
-    const lKey = lift.toLowerCase().replace(/\s+/g, '_');
-    const cur = latest[lKey] || '';
-    const p = prev[lKey] || '';
-    html += `
-      <tr>
-        <td>${lift}</td>
-        <td><input type="number" class="lift-input" data-lift="${lKey}" value="${cur}" placeholder="—" min="0" step="5"></td>
-        <td class="text-muted">${p ? p + ' lbs' : '—'}</td>
-      </tr>
-    `;
-  });
+  if (mainExs.length > 0) {
+    html += `<tr class="lift-section-header"><td colspan="4">Main Lifts</td></tr>`;
+    html += buildRows(mainExs);
+  }
+  if (accessoryExs.length > 0) {
+    html += `<tr class="lift-section-header"><td colspan="4">Accessory Lifts</td></tr>`;
+    html += buildRows(accessoryExs);
+  }
+  if (finisherExs.length > 0) {
+    html += `<tr class="lift-section-header"><td colspan="4">Finisher Lifts</td></tr>`;
+    html += buildRows(finisherExs);
+  }
+
+  if (html === '') {
+    html = '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:12px;">Log workouts with weights to see progress here</td></tr>';
+  }
+
   $('#liftTableBody').innerHTML = html;
 }
 
-$('#saveLiftsBtn').addEventListener('click', () => {
+// Keep save button wired for legacy manual entry fallback
+const saveLiftsBtnEl = document.getElementById('saveLiftsBtn');
+if (saveLiftsBtnEl) saveLiftsBtnEl.addEventListener('click', () => {
   const key = todayKey();
   const lifts = LS.get('lifts') || {};
   const data = {};
@@ -1066,43 +1478,64 @@ function drawLiftChart() {
   const textColor = isDark ? '#797876' : '#7A7974';
   const gridColor = isDark ? '#393836' : '#D4D1CA';
 
-  const lifts = LS.get('lifts') || {};
-  const keys = Object.keys(lifts).sort().slice(-8);
-
   ctx.clearRect(0, 0, w, h);
+
+  // Use auto-derived history for main LIFTS
+  const autoHistory = getLiftHistoryAuto();
+  // Also include legacy manual lifts
+  const legacyLifts = LS.get('lifts') || {};
+
+  // Collect data per main lift across dates
+  const liftData = {};
+  const allDates = new Set();
+
+  LIFTS.forEach(lift => {
+    const hist = autoHistory[lift] || [];
+    liftData[lift] = {};
+    hist.slice(-8).forEach(entry => {
+      liftData[lift][entry.date] = entry.weight;
+      allDates.add(entry.date);
+    });
+    // Supplement with legacy data
+    const lKey = lift.toLowerCase().replace(/\s+/g, '_');
+    Object.entries(legacyLifts).forEach(([date, data]) => {
+      if (data[lKey]) {
+        liftData[lift][date] = data[lKey];
+        allDates.add(date);
+      }
+    });
+  });
+
+  const keys = Array.from(allDates).sort().slice(-8);
 
   if (keys.length < 1) {
     ctx.fillStyle = textColor;
     ctx.font = '14px Satoshi, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Save lift data to see progress chart', w/2, h/2);
+    ctx.fillText('Log workouts with weights to see chart', w/2, h/2);
     return;
   }
 
-  const pad = { top: 20, right: 20, bottom: 40, left: 50 };
-  const chartW = w - pad.left - pad.right;
-  const chartH = h - pad.top - pad.bottom;
-
-  // Gather all values to find range
   let allVals = [];
   keys.forEach(k => {
-    LIFTS.forEach(lift => {
-      const lKey = lift.toLowerCase().replace(/\s+/g, '_');
-      if (lifts[k][lKey]) allVals.push(lifts[k][lKey]);
-    });
+    LIFTS.forEach(lift => { if (liftData[lift][k]) allVals.push(liftData[lift][k]); });
   });
 
   if (allVals.length === 0) {
     ctx.fillStyle = textColor;
     ctx.font = '14px Satoshi, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Save lift data to see progress chart', w/2, h/2);
+    ctx.fillText('Log workouts with weights to see chart', w/2, h/2);
     return;
   }
 
   const minV = Math.min(...allVals) - 10;
   const maxV = Math.max(...allVals) + 10;
   const rangeV = maxV - minV || 1;
+
+  const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
 
   // Grid
   ctx.strokeStyle = gridColor;
@@ -1119,20 +1552,18 @@ function drawLiftChart() {
     ctx.fillText((maxV - (rangeV/4)*i).toFixed(0), pad.left - 6, y + 4);
   }
 
-  // Lines for each lift
   const colors = isDark
     ? ['#4F98A3', '#BB653B', '#6DAA45', '#797876', '#CDCCCA']
     : ['#01696F', '#A84B2F', '#437A22', '#7A7974', '#28251D'];
 
   LIFTS.forEach((lift, li) => {
-    const lKey = lift.toLowerCase().replace(/\s+/g, '_');
     ctx.beginPath();
     ctx.strokeStyle = colors[li];
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     let started = false;
     keys.forEach((k, i) => {
-      const val = lifts[k][lKey];
+      const val = liftData[lift][k];
       if (val) {
         const x = keys.length === 1 ? pad.left + chartW / 2 : pad.left + (i / (keys.length - 1)) * chartW;
         const y = pad.top + (1 - (val - minV) / rangeV) * chartH;
@@ -1202,6 +1633,7 @@ function toggleAccordion(id) {
 }
 // Make global
 window.toggleAccordion = toggleAccordion;
+window.toggleTravelMode = toggleTravelMode;
 
 // ── Init ──
 renderToday();
