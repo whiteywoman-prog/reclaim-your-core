@@ -73,6 +73,7 @@ function switchTab(tabName) {
   if (tabName === 'nutrition') renderNutrition();
   if (tabName === 'progress') renderProgress();
   if (tabName === 'supplements') renderSupplements();
+  if (tabName === 'history') renderHistoryTab();
 }
 
 tabButtons.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -85,7 +86,7 @@ function getSettings() {
     carbsTarget: 170,
     fatTarget: 57,
     bodyWeight: 140,
-    startDate: todayKey(),
+    startDate: '2026-03-31',
     travelMode: false,
     workoutPointer: 1,
   };
@@ -100,7 +101,14 @@ function getProgramWeek() {
   if (settings.travelMode && settings.travelStartWeek) {
     return settings.travelStartWeek;
   }
-  return LS.get('programWeek') || 1;
+  const stored = LS.get('programWeek');
+  if (stored) return stored;
+  // Compute from startDate
+  const start = new Date((settings.startDate || '2026-03-31') + 'T12:00:00');
+  const today = new Date();
+  const days = Math.floor((today - start) / 86400000);
+  const week = Math.max(1, Math.min(12, Math.floor(days / 7) + 1));
+  return week;
 }
 function setProgramWeek(w) { LS.set('programWeek', Math.max(1, Math.min(12, w))); }
 
@@ -385,12 +393,21 @@ function renderToday() {
   updateTravelBtn();
 
   // Workout
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    renderCyclingDay();
+  const settings = getSettings();
+  if (settings.travelMode) {
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      renderTravelRecoveryDay();
+    } else {
+      const workoutId = settings.workoutPointer || 1;
+      renderWorkout(workoutId);
+    }
   } else {
-    const settings = getSettings();
-    const workoutId = settings.workoutPointer || 1;
-    renderWorkout(workoutId);
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      renderCyclingDay();
+    } else {
+      const workoutId = settings.workoutPointer || 1;
+      renderWorkout(workoutId);
+    }
   }
 
   // Habits
@@ -477,6 +494,30 @@ function renderWorkout(workoutId) {
 
   $('#workout-title').textContent = workout.name;
 
+  // Travel mode visual treatment
+  const card = $('#workout-card');
+  if (card) {
+    card.style.display = '';
+    if (settings.travelMode) {
+      card.classList.add('workout-travel-mode');
+    } else {
+      card.classList.remove('workout-travel-mode');
+    }
+  }
+  // Travel chip + subtitle
+  const existingChip = document.getElementById('travel-mode-chip');
+  if (existingChip) existingChip.remove();
+  if (settings.travelMode) {
+    const chip = document.createElement('div');
+    chip.id = 'travel-mode-chip';
+    chip.className = 'travel-mode-chip';
+    chip.innerHTML = '🏝 TRAVEL &mdash; <span style="font-weight:400">Bodyweight &amp; mini-band only &mdash; equipment-free</span>';
+    const titleEl = document.getElementById('workout-title');
+    if (titleEl && titleEl.parentNode) {
+      titleEl.parentNode.insertBefore(chip, titleEl.nextSibling);
+    }
+  }
+
   // Section labels — workout 3 (Active Recovery) uses different labels
   const sectionLabels = {
     warmup: 'Warm-up',
@@ -526,44 +567,77 @@ function renderWorkout(workoutId) {
     `;
   });
   $('#workout-exercises').innerHTML = html;
-  $('#workout-card').style.display = '';
 
-  // Skip / Mark Complete buttons
+  // Skip / Mark Complete buttons (toggleable)
   const actionRow = document.getElementById('workout-action-row');
   if (actionRow) {
     const skippedDays = LS.get('skipped_days') || {};
-    const alreadySkipped = !!skippedDays[key];
-    const alreadyComplete = saved.completed;
-    actionRow.innerHTML = alreadyComplete
-      ? `<span class="workout-complete-badge">✓ Workout Complete</span>`
-      : `
-        <button class="btn-skip" id="skipDayBtn" ${alreadySkipped ? 'disabled' : ''}>${alreadySkipped ? 'Day Skipped' : 'Skip Day'}</button>
-        <button class="btn-complete" id="markCompleteBtn">Mark Complete</button>
-      `;
-    if (!alreadyComplete) {
-      const skipBtn = document.getElementById('skipDayBtn');
-      const completeBtn = document.getElementById('markCompleteBtn');
-      if (skipBtn && !alreadySkipped) {
-        skipBtn.addEventListener('click', () => {
-          if (confirm('Skip today\'s workout? The same workout will queue for your next gym day.')) {
-            const sk = LS.get('skipped_days') || {};
-            sk[key] = { workoutId: settings.workoutPointer };
-            LS.set('skipped_days', sk);
-            renderWorkout(workoutId);
-          }
-        });
-      }
-      if (completeBtn) {
-        completeBtn.addEventListener('click', () => {
-          saveWorkoutState(true);
-          // Advance pointer
+    const isSkipped = !!skippedDays[key];
+    const isComplete = !!saved.completed;
+
+    actionRow.innerHTML = `
+      <button class="btn-skip ${isSkipped ? 'btn-skip-active' : ''}" id="skipDayBtn">
+        ${isSkipped ? '\u2713 Day Skipped (tap to undo)' : 'Skip Day'}
+      </button>
+      <button class="btn-complete ${isComplete ? 'btn-complete-active' : ''}" id="markCompleteBtn">
+        ${isComplete ? '\u2713 Workout Complete (tap to undo)' : 'Mark Complete'}
+      </button>
+    `;
+
+    const skipBtn = document.getElementById('skipDayBtn');
+    const completeBtn = document.getElementById('markCompleteBtn');
+
+    skipBtn.addEventListener('click', () => {
+      const sk = LS.get('skipped_days') || {};
+      if (sk[key]) {
+        delete sk[key]; // un-skip
+        LS.set('skipped_days', sk);
+      } else {
+        // If currently complete, clear complete when skipping
+        const wos = LS.get('workouts') || {};
+        if (wos[key] && wos[key].completed) {
+          wos[key].completed = false;
+          LS.set('workouts', wos);
+          // Revert pointer
           const s = getSettings();
-          s.workoutPointer = (s.workoutPointer % 5) + 1;
+          s.workoutPointer = ((s.workoutPointer - 2 + 5) % 5) + 1;
           saveSettings(s);
-          renderWorkout(workoutId);
-        });
+        }
+        sk[key] = { workoutId: settings.workoutPointer, workoutName: getWorkoutName(settings.workoutPointer, settings.travelMode) };
+        LS.set('skipped_days', sk);
       }
-    }
+      renderToday();
+    });
+
+    completeBtn.addEventListener('click', () => {
+      const wos = LS.get('workouts') || {};
+      if (wos[key] && wos[key].completed) {
+        // un-complete
+        wos[key].completed = false;
+        LS.set('workouts', wos);
+        // Revert pointer
+        const s = getSettings();
+        s.workoutPointer = ((s.workoutPointer - 2 + 5) % 5) + 1;
+        saveSettings(s);
+      } else {
+        // Clear skip if present
+        const sk = LS.get('skipped_days') || {};
+        if (sk[key]) { delete sk[key]; LS.set('skipped_days', sk); }
+        saveWorkoutState(true);
+        // Store workoutName + workoutId on the saved record for history
+        const wos2 = LS.get('workouts') || {};
+        if (wos2[key]) {
+          wos2[key].workoutId = settings.workoutPointer;
+          wos2[key].workoutName = getWorkoutName(settings.workoutPointer, settings.travelMode);
+          wos2[key].travelMode = !!settings.travelMode;
+          LS.set('workouts', wos2);
+        }
+        const s = getSettings();
+        s.workoutPointer = (s.workoutPointer % 5) + 1;
+        saveSettings(s);
+      }
+      renderToday();
+    });
   }
 
   // Event listeners
@@ -594,6 +668,23 @@ function saveWorkoutState(forceComplete) {
 
   workouts[key] = { exercises, completed: forceComplete || allDone };
   LS.set('workouts', workouts);
+}
+
+function renderTravelRecoveryDay() {
+  $('#workout-title').textContent = '🏝 Travel Recovery Day';
+  $('#workout-exercises').innerHTML = `
+    <div class="travel-recovery-card">
+      <div class="travel-recovery-text">Active recovery while traveling: 20-min walk, full-body stretch sequence, or a Travel &mdash; Active Recovery session if you have time.</div>
+      <button class="btn-complete" style="margin-top:12px" onclick="renderWorkout(3)">Do Active Recovery Workout</button>
+    </div>
+  `;
+  const card = $('#workout-card');
+  if (card) {
+    card.style.display = '';
+    card.classList.add('workout-travel-mode');
+  }
+  const actionRow = document.getElementById('workout-action-row');
+  if (actionRow) actionRow.innerHTML = '';
 }
 
 function renderCyclingDay() {
@@ -645,7 +736,243 @@ function getHabitsData() {
   return HABITS.map((h, i) => ({ name: h, done: !!todayHabits['h_' + i] }));
 }
 
-// ── Workout History ──
+// ── HISTORY Tab ──
+function renderHistoryTab() {
+  const filter = LS.get('history_filter') || 'all';
+  // sync active state on filter buttons
+  document.querySelectorAll('.history-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === filter);
+  });
+
+  const workouts = LS.get('workouts') || {};
+  const skipped = LS.get('skipped_days') || {};
+
+  // Build last 60 days
+  const rows = [];
+  for (let i = 0; i < 60; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const wo = workouts[key];
+    const sk = skipped[key];
+    if (!wo && !sk) continue;
+    const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dateLabel = dayName + ', ' + monthNames[d.getMonth()] + ' ' + d.getDate();
+
+    let status = 'partial';
+    let statusLabel = 'In Progress';
+    if (wo && wo.completed) { status = 'completed'; statusLabel = 'Completed'; }
+    else if (sk) { status = 'skipped'; statusLabel = 'Skipped'; }
+    else if (wo) {
+      const exCount = Object.values(wo.exercises || {}).filter(e => e.done).length;
+      statusLabel = exCount + ' exercises done';
+    }
+
+    if (filter !== 'all' && filter !== status) continue;
+
+    const woName = (wo && wo.workoutName) || (sk && sk.workoutName) ||
+                   (wo && wo.workoutId ? getWorkoutName(wo.workoutId, wo.travelMode) : '') ||
+                   (sk && sk.workoutId ? getWorkoutName(sk.workoutId, false) : 'Workout');
+
+    rows.push({ key, dateLabel, status, statusLabel, woName });
+  }
+
+  // Ensure detail view is hidden and list card is visible
+  const detailView = document.getElementById('history-detail-view');
+  if (detailView) detailView.style.display = 'none';
+  const listCard = document.getElementById('history-tab-list');
+  if (listCard && listCard.parentElement) listCard.parentElement.style.display = '';
+
+  const list = document.getElementById('history-tab-list');
+  if (!list) return;
+  if (rows.length === 0) {
+    list.innerHTML = '<div class="empty-state">No workouts logged yet.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(r => `
+    <div class="history-tab-row" data-key="${r.key}">
+      <div class="history-tab-row-left">
+        <div class="history-tab-date">${r.dateLabel}</div>
+        <div class="history-tab-name">${r.woName}</div>
+      </div>
+      <div class="history-tab-row-right">
+        <span class="badge badge-${r.status}">${r.statusLabel}</span>
+        <span class="history-tab-chevron">›</span>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.history-tab-row').forEach(row => {
+    row.addEventListener('click', () => {
+      openHistoryDetail(row.dataset.key);
+    });
+  });
+
+  document.querySelectorAll('.history-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      LS.set('history_filter', btn.dataset.filter);
+      renderHistoryTab();
+    });
+  });
+}
+
+function openHistoryDetail(key) {
+  const workouts = LS.get('workouts') || {};
+  const skipped = LS.get('skipped_days') || {};
+  const wo = workouts[key];
+  const sk = skipped[key];
+
+  // Determine which workout this was
+  let workoutId, travelMode;
+  if (wo && wo.workoutId) { workoutId = wo.workoutId; travelMode = wo.travelMode; }
+  else if (sk) { workoutId = sk.workoutId; travelMode = false; }
+  else {
+    // Infer from date
+    const d = new Date(key);
+    const dow = d.getDay();
+    workoutId = (dow >= 1 && dow <= 5) ? dow : 1;
+    travelMode = false;
+  }
+
+  const workoutSet = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
+  const workout = workoutSet[workoutId];
+  if (!workout) return;
+
+  // Hide list card, show detail card
+  const listCard = document.getElementById('history-tab-list');
+  if (listCard && listCard.parentElement) listCard.parentElement.style.display = 'none';
+
+  const detail = document.getElementById('history-detail-view');
+  detail.style.display = '';
+
+  const saved = wo || { exercises: {}, completed: false };
+  const isSkipped = !!sk;
+
+  const dayName = new Date(key + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const sectionLabels = { warmup: 'Warm-up', main: 'Main Lifts', accessory: 'Accessory Work', finisher: 'Finisher' };
+  const wedLabels = { warmup: 'Vagus Nerve Reset', main: 'Core Work', accessory: 'Fascia Release', finisher: 'Cool Down' };
+  const isRecovery = workout.name.includes('Recovery') || workout.name.includes('Vagus');
+  const labels = isRecovery ? wedLabels : sectionLabels;
+
+  let exHtml = '';
+  let lastSection = '';
+  workout.exercises.forEach((ex, i) => {
+    const exKey = 'ex_' + i;
+    const checked = saved.exercises[exKey] && saved.exercises[exKey].done ? 'checked' : '';
+    const weight = saved.exercises[exKey] && saved.exercises[exKey].weight ? saved.exercises[exKey].weight : '';
+    const section = ex.section || 'main';
+    if (section !== lastSection) {
+      exHtml += `<div class="exercise-section-label">${labels[section] || section}</div>`;
+      lastSection = section;
+    }
+    const showWeight = (section === 'main' || section === 'accessory' ||
+      (section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
+    exHtml += `
+      <div class="exercise-item ${section === 'warmup' ? 'exercise-warmup' : ''} ${section === 'finisher' ? 'exercise-finisher' : ''}">
+        <input type="checkbox" class="hist-ex-check" data-key="${key}" data-ex="${exKey}" ${checked}>
+        <div class="exercise-info">
+          <div class="exercise-name">${ex.name}</div>
+          <div class="exercise-detail">${ex.sets}</div>
+        </div>
+        ${showWeight ? `
+        <div class="exercise-weight">
+          <input type="number" class="hist-weight-input" data-key="${key}" data-ex="${exKey}" value="${weight}" placeholder="lbs" min="0" step="5">
+          <span class="weight-unit">lbs</span>
+        </div>` : '<div></div>'}
+      </div>
+    `;
+  });
+
+  document.getElementById('history-detail-content').innerHTML = `
+    <div class="history-detail-header">
+      <div class="history-detail-date">${dayName}</div>
+      <div class="history-detail-workout">${workout.name}</div>
+      <div class="history-detail-status">
+        ${saved.completed ? '<span class="badge badge-completed">Completed</span>' : ''}
+        ${isSkipped ? '<span class="badge badge-skipped">Skipped</span>' : ''}
+        ${!saved.completed && !isSkipped && Object.keys(saved.exercises||{}).length ? '<span class="badge badge-partial">In Progress</span>' : ''}
+      </div>
+    </div>
+    <div class="history-detail-exercises">${exHtml}</div>
+    <div class="workout-action-row">
+      <button class="btn-skip ${isSkipped ? 'btn-skip-active' : ''}" id="histSkipBtn">${isSkipped ? '\u2713 Skipped (tap to undo)' : 'Mark as Skipped'}</button>
+      <button class="btn-complete ${saved.completed ? 'btn-complete-active' : ''}" id="histCompleteBtn">${saved.completed ? '\u2713 Completed (tap to undo)' : 'Mark Complete'}</button>
+    </div>
+  `;
+
+  // Wire up exercise check / weight inputs
+  document.querySelectorAll('.hist-ex-check').forEach(cb => {
+    cb.addEventListener('change', () => saveHistoryWorkoutState(key, workoutId, travelMode));
+  });
+  document.querySelectorAll('.hist-weight-input').forEach(inp => {
+    inp.addEventListener('change', () => saveHistoryWorkoutState(key, workoutId, travelMode));
+    inp.addEventListener('blur', () => saveHistoryWorkoutState(key, workoutId, travelMode));
+  });
+
+  // Wire skip / complete buttons
+  document.getElementById('histSkipBtn').addEventListener('click', () => {
+    const sk2 = LS.get('skipped_days') || {};
+    const wos2 = LS.get('workouts') || {};
+    if (sk2[key]) {
+      delete sk2[key];
+    } else {
+      sk2[key] = { workoutId, workoutName: getWorkoutName(workoutId, travelMode) };
+      if (wos2[key]) { wos2[key].completed = false; LS.set('workouts', wos2); }
+    }
+    LS.set('skipped_days', sk2);
+    openHistoryDetail(key);
+  });
+  document.getElementById('histCompleteBtn').addEventListener('click', () => {
+    const wos2 = LS.get('workouts') || {};
+    const sk2 = LS.get('skipped_days') || {};
+    if (wos2[key] && wos2[key].completed) {
+      wos2[key].completed = false;
+    } else {
+      if (!wos2[key]) wos2[key] = { exercises: {}, completed: false };
+      wos2[key].completed = true;
+      wos2[key].workoutId = workoutId;
+      wos2[key].workoutName = getWorkoutName(workoutId, travelMode);
+      wos2[key].travelMode = !!travelMode;
+      if (sk2[key]) { delete sk2[key]; LS.set('skipped_days', sk2); }
+    }
+    LS.set('workouts', wos2);
+    openHistoryDetail(key);
+  });
+
+  document.getElementById('historyBackBtn').onclick = () => {
+    detail.style.display = 'none';
+    const listCard2 = document.getElementById('history-tab-list');
+    if (listCard2 && listCard2.parentElement) listCard2.parentElement.style.display = '';
+    renderHistoryTab();
+  };
+}
+
+function saveHistoryWorkoutState(key, workoutId, travelMode) {
+  const wos = LS.get('workouts') || {};
+  const exercises = {};
+  document.querySelectorAll(`.hist-ex-check[data-key="${key}"]`).forEach(cb => {
+    const exKey = cb.dataset.ex;
+    const wInput = document.querySelector(`.hist-weight-input[data-key="${key}"][data-ex="${exKey}"]`);
+    exercises[exKey] = {
+      done: cb.checked,
+      weight: wInput ? parseFloat(wInput.value) || 0 : 0,
+    };
+  });
+  const existing = wos[key] || {};
+  wos[key] = {
+    ...existing,
+    exercises,
+    completed: existing.completed || false,
+    workoutId,
+    workoutName: getWorkoutName(workoutId, travelMode),
+    travelMode: !!travelMode,
+  };
+  LS.set('workouts', wos);
+}
+
+// ── Workout History (Today tab mini-view) ──
 function getWorkoutName(workoutId, travelMode) {
   const ws = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
   return (ws[workoutId] && ws[workoutId].name) || 'Workout ' + workoutId;
@@ -1636,6 +1963,18 @@ window.toggleAccordion = toggleAccordion;
 window.toggleTravelMode = toggleTravelMode;
 
 // ── Init ──
+// One-time migration: set correct startDate
+(function migrateStartDate() {
+  const s = getSettings();
+  if (!s.startDateMigratedV3) {
+    s.startDate = '2026-03-31';
+    s.startDateMigratedV3 = true;
+    saveSettings(s);
+    // Clear any stale programWeek so it recomputes from startDate
+    LS.set('programWeek', null);
+  }
+})();
+
 renderToday();
 renderNutrition();
 renderProgress();
