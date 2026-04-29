@@ -392,20 +392,19 @@ function renderToday() {
   // Travel mode UI update
   updateTravelBtn();
 
-  // Workout
+  // Workout — locked to day of week (Mon=1..Fri=5, Sat/Sun=cycling)
   const settings = getSettings();
+  const workoutId = getWorkoutIdForDate(now);
   if (settings.travelMode) {
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
+    if (workoutId === null) {
       renderTravelRecoveryDay();
     } else {
-      const workoutId = settings.workoutPointer || 1;
       renderWorkout(workoutId);
     }
   } else {
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
+    if (workoutId === null) {
       renderCyclingDay();
     } else {
-      const workoutId = settings.workoutPointer || 1;
       renderWorkout(workoutId);
     }
   }
@@ -587,6 +586,9 @@ function renderWorkout(workoutId) {
     const skipBtn = document.getElementById('skipDayBtn');
     const completeBtn = document.getElementById('markCompleteBtn');
 
+    // Day-of-week locked workout for today
+    const todayWorkoutId = getWorkoutIdForDate(new Date()) || workoutId;
+
     skipBtn.addEventListener('click', () => {
       const sk = LS.get('skipped_days') || {};
       if (sk[key]) {
@@ -598,12 +600,8 @@ function renderWorkout(workoutId) {
         if (wos[key] && wos[key].completed) {
           wos[key].completed = false;
           LS.set('workouts', wos);
-          // Revert pointer
-          const s = getSettings();
-          s.workoutPointer = ((s.workoutPointer - 2 + 5) % 5) + 1;
-          saveSettings(s);
         }
-        sk[key] = { workoutId: settings.workoutPointer, workoutName: getWorkoutName(settings.workoutPointer, settings.travelMode) };
+        sk[key] = { workoutId: todayWorkoutId, workoutName: getWorkoutName(todayWorkoutId, settings.travelMode) };
         LS.set('skipped_days', sk);
       }
       renderToday();
@@ -615,10 +613,6 @@ function renderWorkout(workoutId) {
         // un-complete
         wos[key].completed = false;
         LS.set('workouts', wos);
-        // Revert pointer
-        const s = getSettings();
-        s.workoutPointer = ((s.workoutPointer - 2 + 5) % 5) + 1;
-        saveSettings(s);
       } else {
         // Clear skip if present
         const sk = LS.get('skipped_days') || {};
@@ -627,14 +621,11 @@ function renderWorkout(workoutId) {
         // Store workoutName + workoutId on the saved record for history
         const wos2 = LS.get('workouts') || {};
         if (wos2[key]) {
-          wos2[key].workoutId = settings.workoutPointer;
-          wos2[key].workoutName = getWorkoutName(settings.workoutPointer, settings.travelMode);
+          wos2[key].workoutId = todayWorkoutId;
+          wos2[key].workoutName = getWorkoutName(todayWorkoutId, settings.travelMode);
           wos2[key].travelMode = !!settings.travelMode;
           LS.set('workouts', wos2);
         }
-        const s = getSettings();
-        s.workoutPointer = (s.workoutPointer % 5) + 1;
-        saveSettings(s);
       }
       renderToday();
     });
@@ -771,9 +762,12 @@ function renderHistoryTab() {
 
     if (filter !== 'all' && filter !== status) continue;
 
-    const woName = (wo && wo.workoutName) || (sk && sk.workoutName) ||
-                   (wo && wo.workoutId ? getWorkoutName(wo.workoutId, wo.travelMode) : '') ||
-                   (sk && sk.workoutId ? getWorkoutName(sk.workoutId, false) : 'Workout');
+    // Always derive workout name from day-of-week (locked mapping)
+    const dowWorkoutId = getWorkoutIdForDate(key);
+    const isTravel = (wo && wo.travelMode) || false;
+    const woName = dowWorkoutId === null
+      ? 'Cycling Day'
+      : getWorkoutName(dowWorkoutId, isTravel);
 
     rows.push({ key, dateLabel, status, statusLabel, woName });
   }
@@ -823,16 +817,25 @@ function openHistoryDetail(key) {
   const wo = workouts[key];
   const sk = skipped[key];
 
-  // Determine which workout this was
-  let workoutId, travelMode;
-  if (wo && wo.workoutId) { workoutId = wo.workoutId; travelMode = wo.travelMode; }
-  else if (sk) { workoutId = sk.workoutId; travelMode = false; }
-  else {
-    // Infer from date
-    const d = new Date(key);
-    const dow = d.getDay();
-    workoutId = (dow >= 1 && dow <= 5) ? dow : 1;
-    travelMode = false;
+  // Determine workout strictly from day-of-week (locked mapping)
+  const workoutId = getWorkoutIdForDate(key);
+  const travelMode = (wo && wo.travelMode) || false;
+
+  if (workoutId === null) {
+    // Weekend — cycling/recovery, no detail to show
+    document.getElementById('history-detail-content').innerHTML =
+      '<div class="history-detail-header"><div class="history-detail-workout">' +
+      (sk ? 'Cycling Day (Skipped)' : 'Cycling Day') +
+      '</div></div><div class="empty-state">Saturdays and Sundays are cycling/recovery days — no structured workout to log.</div>';
+    document.getElementById('history-detail-view').style.display = '';
+    const listCard0 = document.getElementById('history-tab-list');
+    if (listCard0 && listCard0.parentElement) listCard0.parentElement.style.display = 'none';
+    document.getElementById('historyBackBtn').onclick = () => {
+      document.getElementById('history-detail-view').style.display = 'none';
+      if (listCard0 && listCard0.parentElement) listCard0.parentElement.style.display = '';
+      renderHistoryTab();
+    };
+    return;
   }
 
   const workoutSet = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
@@ -970,6 +973,15 @@ function saveHistoryWorkoutState(key, workoutId, travelMode) {
     travelMode: !!travelMode,
   };
   LS.set('workouts', wos);
+}
+
+// ── Day-of-week workout mapping (locked) ──
+// Mon→1, Tue→2, Wed→3, Thu→4, Fri→5, Sat/Sun→null (cycling/recovery)
+function getWorkoutIdForDate(dateLike) {
+  const d = (dateLike instanceof Date) ? dateLike : new Date(dateLike + 'T12:00:00');
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return null;
+  return dow; // Mon=1..Fri=5
 }
 
 // ── Workout History (Today tab mini-view) ──
@@ -1973,6 +1985,42 @@ window.toggleTravelMode = toggleTravelMode;
     // Clear any stale programWeek so it recomputes from startDate
     LS.set('programWeek', null);
   }
+})();
+
+// V4 migration: rewrite past workout/skipped records so workoutId + name match day-of-week
+(function migrateWorkoutsToDayOfWeek() {
+  const s = getSettings();
+  if (s.workoutsMigratedV4) return;
+
+  const workouts = LS.get('workouts') || {};
+  Object.keys(workouts).forEach(key => {
+    const dowId = getWorkoutIdForDate(key);
+    if (dowId !== null) {
+      const isTravel = !!workouts[key].travelMode;
+      workouts[key].workoutId = dowId;
+      workouts[key].workoutName = getWorkoutName(dowId, isTravel);
+    }
+  });
+  LS.set('workouts', workouts);
+
+  const skipped = LS.get('skipped_days') || {};
+  Object.keys(skipped).forEach(key => {
+    const dowId = getWorkoutIdForDate(key);
+    if (dowId !== null) {
+      skipped[key].workoutId = dowId;
+      skipped[key].workoutName = getWorkoutName(dowId, false);
+    } else {
+      // Weekend day — normalize to Cycling Day
+      skipped[key].workoutId = null;
+      skipped[key].workoutName = 'Cycling Day';
+    }
+  });
+  LS.set('skipped_days', skipped);
+
+  s.workoutsMigratedV4 = true;
+  // Reset workoutPointer — no longer used for routing, but keep clean
+  s.workoutPointer = 1;
+  saveSettings(s);
 })();
 
 renderToday();
