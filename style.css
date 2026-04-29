@@ -1340,6 +1340,11 @@ a:hover { text-decoration: underline; }
   background: color-mix(in srgb, var(--color-terra) 15%, transparent);
   color: var(--color-terra);
 }
+.badge-unlogged {
+  background: color-mix(in srgb, var(--color-text-muted) 8%, transparent);
+  color: var(--color-text-muted);
+  border: 1px dashed color-mix(in srgb, var(--color-text-muted) 35%, transparent);
+}
 
 /* ── v2: Lift Table Trend Arrows ── */
 .trend-up   { color: var(--color-success); font-weight: 700; }

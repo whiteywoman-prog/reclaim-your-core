@@ -738,27 +738,36 @@ function renderHistoryTab() {
   const workouts = LS.get('workouts') || {};
   const skipped = LS.get('skipped_days') || {};
 
-  // Build last 60 days
+  // Build every day from program start (or 60 days back, whichever is later) up to today
+  const settings = getSettings();
+  const programStart = new Date((settings.startDate || '2026-03-31') + 'T12:00:00');
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  sixtyDaysAgo.setHours(12, 0, 0, 0);
+  const rangeStart = programStart > sixtyDaysAgo ? programStart : sixtyDaysAgo;
+
   const rows = [];
-  for (let i = 0; i < 60; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const cursor = new Date(today);
+  while (cursor >= rangeStart) {
+    const key = cursor.getFullYear() + '-' + String(cursor.getMonth()+1).padStart(2,'0') + '-' + String(cursor.getDate()).padStart(2,'0');
     const wo = workouts[key];
     const sk = skipped[key];
-    if (!wo && !sk) continue;
-    const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+    const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][cursor.getDay()];
     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const dateLabel = dayName + ', ' + monthNames[d.getMonth()] + ' ' + d.getDate();
+    const dateLabel = dayName + ', ' + monthNames[cursor.getMonth()] + ' ' + cursor.getDate();
 
-    let status = 'partial';
-    let statusLabel = 'In Progress';
+    let status = 'unlogged';
+    let statusLabel = 'Not Logged';
     if (wo && wo.completed) { status = 'completed'; statusLabel = 'Completed'; }
     else if (sk) { status = 'skipped'; statusLabel = 'Skipped'; }
     else if (wo) {
       const exCount = Object.values(wo.exercises || {}).filter(e => e.done).length;
-      statusLabel = exCount + ' exercises done';
+      if (exCount > 0) { status = 'partial'; statusLabel = exCount + ' exercises done'; }
     }
+
+    cursor.setDate(cursor.getDate() - 1);
 
     if (filter !== 'all' && filter !== status) continue;
 
@@ -822,14 +831,57 @@ function openHistoryDetail(key) {
   const travelMode = (wo && wo.travelMode) || false;
 
   if (workoutId === null) {
-    // Weekend — cycling/recovery, no detail to show
-    document.getElementById('history-detail-content').innerHTML =
-      '<div class="history-detail-header"><div class="history-detail-workout">' +
-      (sk ? 'Cycling Day (Skipped)' : 'Cycling Day') +
-      '</div></div><div class="empty-state">Saturdays and Sundays are cycling/recovery days — no structured workout to log.</div>';
+    // Weekend — cycling day. Show simple status with skip/complete toggles.
+    const dayNameW = new Date(key + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const wasComplete = !!(wo && wo.completed);
+    const wasSkipped = !!sk;
+    document.getElementById('history-detail-content').innerHTML = `
+      <div class="history-detail-header">
+        <div class="history-detail-date">${dayNameW}</div>
+        <div class="history-detail-workout">Cycling Day</div>
+        <div class="history-detail-status">
+          ${wasComplete ? '<span class="badge badge-completed">Completed</span>' : ''}
+          ${wasSkipped ? '<span class="badge badge-skipped">Skipped</span>' : ''}
+        </div>
+      </div>
+      <div class="empty-state" style="padding:16px 0;">Cycling day — no structured workout. Mark complete if you rode, or skip if you took a rest day.</div>
+      <div class="workout-action-row">
+        <button class="btn-skip ${wasSkipped ? 'btn-skip-active' : ''}" id="histSkipBtn">${wasSkipped ? '\u2713 Skipped (tap to undo)' : 'Mark as Skipped'}</button>
+        <button class="btn-complete ${wasComplete ? 'btn-complete-active' : ''}" id="histCompleteBtn">${wasComplete ? '\u2713 Completed (tap to undo)' : 'Mark Complete'}</button>
+      </div>
+    `;
     document.getElementById('history-detail-view').style.display = '';
     const listCard0 = document.getElementById('history-tab-list');
     if (listCard0 && listCard0.parentElement) listCard0.parentElement.style.display = 'none';
+
+    document.getElementById('histSkipBtn').addEventListener('click', () => {
+      const sk2 = LS.get('skipped_days') || {};
+      const wos2 = LS.get('workouts') || {};
+      if (sk2[key]) { delete sk2[key]; }
+      else {
+        sk2[key] = { workoutId: null, workoutName: 'Cycling Day' };
+        if (wos2[key]) { wos2[key].completed = false; LS.set('workouts', wos2); }
+      }
+      LS.set('skipped_days', sk2);
+      openHistoryDetail(key);
+    });
+    document.getElementById('histCompleteBtn').addEventListener('click', () => {
+      const wos2 = LS.get('workouts') || {};
+      const sk2 = LS.get('skipped_days') || {};
+      if (wos2[key] && wos2[key].completed) {
+        wos2[key].completed = false;
+      } else {
+        if (!wos2[key]) wos2[key] = { exercises: {}, completed: false };
+        wos2[key].completed = true;
+        wos2[key].workoutId = null;
+        wos2[key].workoutName = 'Cycling Day';
+        wos2[key].travelMode = false;
+        if (sk2[key]) { delete sk2[key]; LS.set('skipped_days', sk2); }
+      }
+      LS.set('workouts', wos2);
+      openHistoryDetail(key);
+    });
+
     document.getElementById('historyBackBtn').onclick = () => {
       document.getElementById('history-detail-view').style.display = 'none';
       if (listCard0 && listCard0.parentElement) listCard0.parentElement.style.display = '';
