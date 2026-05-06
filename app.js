@@ -19,7 +19,8 @@ const SUPABASE_KEY = 'sb_publishable_KUGATGbP7oBLa6g3Velf3w_rl2gXWRn';
 // All app data lives under these LS keys — we mirror this set to the cloud.
 const SYNC_KEYS = [
   'settings', 'programWeek', 'workouts', 'skipped_days',
-  'supplements', 'nutrition', 'theme'
+  'supplements', 'theme', 'habits', 'lifts', 'protein',
+  'measurements', 'myFoods'
 ];
 
 const CloudSync = {
@@ -134,10 +135,19 @@ const CloudSync = {
     try {
       SYNC_KEYS.forEach(k => {
         if (!(k in remote)) return;
-        // For keyed maps (workouts, skipped_days, supplements, nutrition), merge by key
-        if (['workouts', 'skipped_days', 'supplements', 'nutrition'].indexOf(k) !== -1) {
+        // For date-keyed maps, merge by key (cloud wins per-key)
+        if (['workouts', 'skipped_days', 'supplements', 'habits', 'lifts', 'protein', 'measurements'].indexOf(k) !== -1) {
           const local = LS.get(k) || {};
           const merged = Object.assign({}, local, remote[k]);
+          LS.set(k, merged);
+        } else if (k === 'myFoods') {
+          // myFoods is an array — merge by name (case-insensitive), cloud wins on duplicates
+          const local = LS.get(k) || [];
+          const remoteArr = Array.isArray(remote[k]) ? remote[k] : [];
+          const seen = {};
+          const merged = [];
+          remoteArr.forEach(f => { const n = (f.name || '').toLowerCase(); if (n && !seen[n]) { seen[n] = true; merged.push(f); } });
+          local.forEach(f => { const n = (f.name || '').toLowerCase(); if (n && !seen[n]) { seen[n] = true; merged.push(f); } });
           LS.set(k, merged);
         } else {
           // For singletons (settings, programWeek, theme), prefer cloud
