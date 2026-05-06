@@ -8,6 +8,189 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const _memStore = {};
 const _lsOk = (() => { try { const t = '__t'; window['local'+'Storage'].setItem(t, '1'); window['local'+'Storage'].removeItem(t); return true; } catch { return false; } })();
 const _ls = _lsOk ? window['local'+'Storage'] : null;
+
+// ── Cloud sync (Supabase) ──
+// Strategy: localStorage stays source of truth for UI reads (instant, offline-OK).
+// Every LS.set queues a debounced save of the whole blob to Supabase.
+// On sign-in, we pull the cloud blob and merge it with local data.
+const SUPABASE_URL = 'https://osqmfjpspjcqnpbtsywu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_KUGATGbP7oBLa6g3Velf3w_rl2gXWRn';
+
+// All app data lives under these LS keys — we mirror this set to the cloud.
+const SYNC_KEYS = [
+  'settings', 'programWeek', 'workouts', 'skipped_days',
+  'supplements', 'nutrition', 'theme'
+];
+
+const CloudSync = {
+  session: null,
+  status: 'offline', // 'offline' | 'syncing' | 'synced' | 'error'
+  saveTimer: null,
+  isApplyingRemote: false, // when true, LS.set won't push back to cloud
+
+  async _fetch(path, opts = {}) {
+    const headers = Object.assign({
+      'apikey': SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    }, opts.headers || {});
+    if (this.session) headers['Authorization'] = 'Bearer ' + this.session.access_token;
+    const res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers }));
+    return res;
+  },
+
+  loadSession() {
+    try {
+      const raw = _ls ? _ls.getItem('rcyc_session') : null;
+      if (raw) {
+        const s = JSON.parse(raw);
+        // expires_at is a unix epoch in seconds
+        if (s.expires_at && s.expires_at * 1000 > Date.now()) {
+          this.session = s;
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  },
+  saveSession(s) {
+    if (_ls) {
+      if (s) _ls.setItem('rcyc_session', JSON.stringify(s));
+      else _ls.removeItem('rcyc_session');
+    }
+    this.session = s;
+  },
+  isSignedIn() { return !!this.session; },
+  email() { return this.session && this.session.user && this.session.user.email; },
+
+  async signUp(email, password) {
+    const res = await this._fetch('/auth/v1/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.msg || j.error_description || 'Sign-up failed');
+    if (j.access_token) this.saveSession(j);
+    return j;
+  },
+  async signIn(email, password) {
+    const res = await this._fetch('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.msg || j.error_description || 'Sign-in failed');
+    if (j.access_token) this.saveSession(j);
+    return j;
+  },
+  async signOut() {
+    try { await this._fetch('/auth/v1/logout', { method: 'POST' }); } catch {}
+    this.saveSession(null);
+    this.status = 'offline';
+  },
+
+  // Pull the cloud blob
+  async pull() {
+    if (!this.session) return null;
+    const res = await this._fetch('/rest/v1/app_data?select=data,updated_at');
+    if (!res.ok) throw new Error('Pull failed: ' + res.status);
+    const rows = await res.json();
+    return rows[0] || null;
+  },
+
+  // Push the entire blob (calls the save_app_data RPC)
+  async push(blob) {
+    if (!this.session) return;
+    this.status = 'syncing';
+    this._badge();
+    const res = await this._fetch('/rest/v1/rpc/save_app_data', {
+      method: 'POST',
+      body: JSON.stringify({ payload: blob }),
+    });
+    if (!res.ok) {
+      this.status = 'error';
+      this._badge();
+      throw new Error('Push failed: ' + res.status);
+    }
+    this.status = 'synced';
+    this._badge();
+  },
+
+  // Build the current LS blob to upload
+  buildLocalBlob() {
+    const blob = {};
+    SYNC_KEYS.forEach(k => {
+      const raw = _ls ? _ls.getItem('rcyc_' + k) : _memStore['rcyc_' + k];
+      if (raw != null) {
+        try { blob[k] = JSON.parse(raw); } catch { blob[k] = raw; }
+      }
+    });
+    return blob;
+  },
+
+  // Apply a cloud blob into LS, merging where it's safe
+  applyRemote(remote) {
+    if (!remote) return;
+    this.isApplyingRemote = true;
+    try {
+      SYNC_KEYS.forEach(k => {
+        if (!(k in remote)) return;
+        // For keyed maps (workouts, skipped_days, supplements, nutrition), merge by key
+        if (['workouts', 'skipped_days', 'supplements', 'nutrition'].indexOf(k) !== -1) {
+          const local = LS.get(k) || {};
+          const merged = Object.assign({}, local, remote[k]);
+          LS.set(k, merged);
+        } else {
+          // For singletons (settings, programWeek, theme), prefer cloud
+          LS.set(k, remote[k]);
+        }
+      });
+    } finally {
+      this.isApplyingRemote = false;
+    }
+  },
+
+  // Schedule a debounced push (after 1.2s of quiet)
+  scheduleSave() {
+    if (!this.session || this.isApplyingRemote) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.push(this.buildLocalBlob()).catch(err => {
+        console.warn('Cloud sync error:', err.message);
+      });
+    }, 1200);
+  },
+
+  // First-run sync: pull, merge, push back the merged result
+  async initialSync() {
+    if (!this.session) return;
+    try {
+      this.status = 'syncing';
+      this._badge();
+      const cloud = await this.pull();
+      if (cloud && cloud.data && Object.keys(cloud.data).length > 0) {
+        this.applyRemote(cloud.data);
+      }
+      // Push the merged result so cloud has everything local had
+      await this.push(this.buildLocalBlob());
+      this.status = 'synced';
+      this._badge();
+    } catch (err) {
+      console.warn('Initial sync error:', err.message);
+      this.status = 'error';
+      this._badge();
+    }
+  },
+
+  _badge() {
+    const el = document.getElementById('sync-badge');
+    if (!el) return;
+    if (!this.session) { el.textContent = ''; el.className = 'sync-badge'; return; }
+    const text = { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error', offline: '' }[this.status] || '';
+    el.textContent = text;
+    el.className = 'sync-badge sync-' + this.status;
+  },
+};
+
 const LS = {
   get(key) {
     try {
@@ -19,6 +202,7 @@ const LS = {
     const s = JSON.stringify(val);
     if (_ls) { try { _ls.setItem('rcyc_' + key, s); } catch { _memStore['rcyc_' + key] = s; } }
     else { _memStore['rcyc_' + key] = s; }
+    if (SYNC_KEYS.indexOf(key) !== -1) CloudSync.scheduleSave();
   },
 };
 function todayKey() {
@@ -2207,6 +2391,126 @@ window.toggleTravelMode = toggleTravelMode;
   // Reset workoutPointer — no longer used for routing, but keep clean
   s.workoutPointer = 1;
   saveSettings(s);
+})();
+
+// ── Auth UI wiring ──
+(function initAuth() {
+  const modal = document.getElementById('authModal');
+  const sheet = document.getElementById('accountSheet');
+  const form = document.getElementById('authForm');
+  const email = document.getElementById('authEmail');
+  const password = document.getElementById('authPassword');
+  const submit = document.getElementById('authSubmit');
+  const skip = document.getElementById('authSkip');
+  const errEl = document.getElementById('authError');
+  let mode = 'signin';
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.auth-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.authMode === m);
+    });
+    submit.textContent = m === 'signup' ? 'Create account' : 'Sign in';
+    password.setAttribute('autocomplete', m === 'signup' ? 'new-password' : 'current-password');
+    errEl.hidden = true;
+  }
+  document.querySelectorAll('.auth-tab').forEach(b => {
+    b.addEventListener('click', () => setMode(b.dataset.authMode));
+  });
+
+  function showAuthModal() { modal.hidden = false; }
+  function hideAuthModal() { modal.hidden = true; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.hidden = true;
+    submit.disabled = true;
+    const oldText = submit.textContent;
+    submit.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
+    try {
+      if (mode === 'signup') {
+        await CloudSync.signUp(email.value.trim(), password.value);
+      } else {
+        await CloudSync.signIn(email.value.trim(), password.value);
+      }
+      hideAuthModal();
+      await CloudSync.initialSync();
+      // Re-render every tab so freshly-pulled data shows up
+      try { renderToday(); } catch {}
+      try { renderNutrition(); } catch {}
+      try { renderProgress(); } catch {}
+      try { renderProgram(); } catch {}
+      try { renderSupplements(); } catch {}
+      try { renderHistoryTab(); } catch {}
+    } catch (err) {
+      errEl.textContent = err.message || 'Something went wrong. Try again.';
+      errEl.hidden = false;
+    } finally {
+      submit.disabled = false;
+      submit.textContent = oldText;
+    }
+  });
+
+  skip.addEventListener('click', () => {
+    hideAuthModal();
+    LS.set('auth_skipped', true);
+  });
+
+  // Account sheet (when signed in)
+  function showAccountSheet() {
+    document.getElementById('accountEmail').textContent = CloudSync.email() || '';
+    const statusEl = document.getElementById('accountStatus');
+    const map = { syncing: 'Syncing…', synced: 'All changes saved', error: 'Sync error — will retry', offline: 'Offline' };
+    statusEl.textContent = map[CloudSync.status] || '';
+    sheet.hidden = false;
+  }
+  function hideAccountSheet() { sheet.hidden = true; }
+  document.getElementById('accountClose').addEventListener('click', hideAccountSheet);
+  document.getElementById('accountSignOut').addEventListener('click', async () => {
+    await CloudSync.signOut();
+    hideAccountSheet();
+    showAuthModal();
+    CloudSync._badge();
+  });
+  document.getElementById('accountSyncNow').addEventListener('click', async () => {
+    try {
+      await CloudSync.push(CloudSync.buildLocalBlob());
+      const cloud = await CloudSync.pull();
+      if (cloud && cloud.data) CloudSync.applyRemote(cloud.data);
+      try { renderToday(); } catch {}
+      try { renderProgress(); } catch {}
+      try { renderHistoryTab(); } catch {}
+      showAccountSheet();
+    } catch (err) {
+      alert('Sync failed: ' + err.message);
+    }
+  });
+
+  // Account icon: opens sign-in if signed out, account sheet if signed in
+  const accountBtn = document.getElementById('accountBtn');
+  if (accountBtn) {
+    accountBtn.addEventListener('click', () => {
+      if (CloudSync.isSignedIn()) showAccountSheet();
+      else showAuthModal();
+    });
+  }
+
+  // Tap outside to dismiss
+  modal.addEventListener('click', (e) => { if (e.target === modal) hideAuthModal(); });
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) hideAccountSheet(); });
+
+  // Boot: try to restore session, do initial sync, otherwise prompt to sign in
+  if (CloudSync.loadSession()) {
+    CloudSync._badge();
+    CloudSync.initialSync().then(() => {
+      try { renderToday(); } catch {}
+      try { renderProgress(); } catch {}
+      try { renderHistoryTab(); } catch {}
+    });
+  } else if (!LS.get('auth_skipped')) {
+    // First-time visitor: gently surface the sign-in prompt
+    setTimeout(showAuthModal, 250);
+  }
 })();
 
 renderToday();

@@ -22,8 +22,12 @@
         <span class="app-title">Reclaim Your Core</span>
       </div>
       <div class="header-actions">
+        <span id="sync-badge" class="sync-badge"></span>
         <button class="icon-btn" data-theme-toggle aria-label="Toggle dark mode">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <button class="icon-btn" id="accountBtn" aria-label="Account" title="Account">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
         <button class="icon-btn" id="exportBtn" aria-label="Export data">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -706,6 +710,43 @@
         History
       </button>
     </nav>
+  </div>
+
+  <!-- Auth modal: appears when signed out, dismissible (app still works offline) -->
+  <div id="authModal" class="auth-modal" hidden>
+    <div class="auth-card">
+      <h2 class="auth-title">Sync across devices</h2>
+      <p class="auth-sub">Sign in to keep your workouts in sync between iPhone and laptop. Your data stays private.</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-mode="signin">Sign in</button>
+        <button class="auth-tab" data-auth-mode="signup">Create account</button>
+      </div>
+
+      <form id="authForm" class="auth-form" autocomplete="on">
+        <label class="auth-label">Email
+          <input type="email" id="authEmail" required autocomplete="email" inputmode="email" autocapitalize="none">
+        </label>
+        <label class="auth-label">Password
+          <input type="password" id="authPassword" required minlength="8" autocomplete="current-password">
+        </label>
+        <div class="auth-error" id="authError" hidden></div>
+        <button type="submit" class="btn btn-primary" id="authSubmit">Sign in</button>
+        <button type="button" class="btn-text" id="authSkip">Continue without sync</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Account sheet: appears when signed in and user taps the account icon -->
+  <div id="accountSheet" class="auth-modal" hidden>
+    <div class="auth-card">
+      <h2 class="auth-title">Account</h2>
+      <p class="auth-sub" id="accountEmail">—</p>
+      <div class="auth-status" id="accountStatus"></div>
+      <button type="button" class="btn btn-secondary" id="accountSyncNow">Sync now</button>
+      <button type="button" class="btn btn-secondary" id="accountSignOut">Sign out</button>
+      <button type="button" class="btn-text" id="accountClose">Close</button>
+    </div>
   </div>
 
   <script src="app.js"></script>
