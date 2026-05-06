@@ -481,6 +481,72 @@ function finisherUsesWeight(name) {
   return ['Plank Hold', 'Hanging Leg', 'Dead Bug', 'Pallof'].some(kw => name.includes(kw));
 }
 
+// ── Phase / Progression ──
+// Source: 12-week periodization in Reclaim Your Core program
+// Foundation 1–2: ~75% 1RM, form focus
+// Building 3–4: +2–5 lbs main lifts if form solid
+// Intensify 5–8: 80–85% 1RM main lifts
+// Week 9: Deload (40–50% off)
+// Peak 10–12: push to new PRs
+function getPhase(week) {
+  if (!week) week = getProgramWeek();
+  if (week <= 2) {
+    return { id: 'foundation', name: 'Foundation', weeks: 'Wk 1–2', mainPct: '~75% 1RM',
+      mainBumpLb: 0, accessoryBumpLb: 0, deload: false,
+      headline: 'Nail your form. Stay at ~75% 1RM on main lifts.',
+      tip: 'Match last week. Form first.' };
+  }
+  if (week <= 4) {
+    return { id: 'building', name: 'Building', weeks: 'Wk 3–4', mainPct: '~78–80% 1RM',
+      mainBumpLb: 5, accessoryBumpLb: 2.5, deload: false,
+      headline: 'Add 2–5 lbs to main lifts if last week’s form was solid.',
+      tip: '+5 lb main, +2.5 lb accessory.' };
+  }
+  if (week <= 8) {
+    return { id: 'intensify', name: 'Build / Intensify', weeks: 'Wk 5–8', mainPct: '80–85% 1RM',
+      mainBumpLb: 5, accessoryBumpLb: 2.5, deload: false,
+      headline: 'Working at 80–85% 1RM on main lifts. Heaviest stretch.',
+      tip: '+5 lb main when all reps clean. Hold accessory or +2.5 lb.' };
+  }
+  if (week === 9) {
+    return { id: 'deload', name: 'Deload', weeks: 'Wk 9', mainPct: '~50% prior load',
+      mainBumpLb: 0, accessoryBumpLb: 0, deload: true,
+      headline: 'Deload week — cut all weights ~50% to recover before Peak.',
+      tip: 'Use ~50% of last working weight on every lift.' };
+  }
+  return { id: 'peak', name: 'Peak / PR', weeks: 'Wk 10–12', mainPct: '85%+ 1RM',
+    mainBumpLb: 5, accessoryBumpLb: 2.5, deload: false,
+    headline: 'Push for new PRs. Recover hard between sessions.',
+    tip: '+5–10 lb main on a feels-good day. Accessory +2.5 lb.' };
+}
+
+// Round to nearest 5 lb (or 2.5 for small accessory bumps)
+function roundToPlate(lb, increment) {
+  const inc = increment || 5;
+  return Math.round(lb / inc) * inc;
+}
+
+// Last logged weight for a given exercise name across all saved workouts
+function getLastWeightForExercise(exerciseName) {
+  const history = getLiftHistoryAuto();
+  const arr = history[exerciseName];
+  if (!arr || arr.length === 0) return null;
+  return { weight: arr[arr.length - 1].weight, date: arr[arr.length - 1].date };
+}
+
+// Suggested target weight for an exercise this session, given last log + phase
+function getTargetWeight(exerciseName, section) {
+  const last = getLastWeightForExercise(exerciseName);
+  if (!last) return null; // no history yet — user picks a starting weight
+  const phase = getPhase();
+  if (phase.deload) {
+    return { weight: roundToPlate(last.weight * 0.5, 5), basis: 'deload', last: last.weight };
+  }
+  const bump = section === 'main' ? phase.mainBumpLb : phase.accessoryBumpLb;
+  if (!bump) return { weight: roundToPlate(last.weight, 5), basis: 'hold', last: last.weight };
+  return { weight: roundToPlate(last.weight + bump, section === 'main' ? 5 : 2.5), basis: 'bump', last: last.weight };
+}
+
 function renderWorkout(workoutId) {
   const settings = getSettings();
   const workoutSet = settings.travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
@@ -517,6 +583,32 @@ function renderWorkout(workoutId) {
     }
   }
 
+  // Phase guidance card — only on weighted (non-recovery) workouts
+  const existingPhase = document.getElementById('phase-guide-card');
+  if (existingPhase) existingPhase.remove();
+  const isRecoveryDay = workout.name.includes('Recovery') || workout.name.includes('Vagus');
+  if (!isRecoveryDay && !settings.travelMode) {
+    const wk = getProgramWeek();
+    const ph = getPhase(wk);
+    const phaseCard = document.createElement('div');
+    phaseCard.id = 'phase-guide-card';
+    phaseCard.className = 'phase-guide-card phase-' + ph.id;
+    phaseCard.innerHTML = `
+      <div class="phase-guide-row">
+        <span class="phase-guide-name">${ph.name}</span>
+        <span class="phase-guide-week">Week ${wk} · ${ph.weeks}</span>
+      </div>
+      <div class="phase-guide-headline">${ph.headline}</div>
+      <div class="phase-guide-tip">Main lifts: ${ph.mainPct} · ${ph.tip}</div>
+    `;
+    // Insert above the card-header (full-width), not as a sibling of the title (which is in a flex row)
+    const workoutCard = document.getElementById('workout-card');
+    const cardHeader = workoutCard ? workoutCard.querySelector('.card-header') : null;
+    if (workoutCard && cardHeader) {
+      workoutCard.insertBefore(phaseCard, cardHeader);
+    }
+  }
+
   // Section labels — workout 3 (Active Recovery) uses different labels
   const sectionLabels = {
     warmup: 'Warm-up',
@@ -550,12 +642,27 @@ function renderWorkout(workoutId) {
     const showWeight = (section === 'main' || section === 'accessory' ||
       (section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
 
+    // Phase-aware target weight suggestion (based on last logged weight)
+    let targetHtml = '';
+    if (showWeight) {
+      const t = getTargetWeight(ex.name, section);
+      if (t) {
+        const basisLabel = t.basis === 'deload' ? 'deload ✓'
+          : t.basis === 'bump' ? `+${t.weight - t.last} lb`
+          : 'hold';
+        targetHtml = `<div class="exercise-target" data-target-for="${exKey}" title="Tap to use">Target: ${t.weight} lb · ${basisLabel}</div>`;
+      } else {
+        targetHtml = `<div class="exercise-target exercise-target-empty">No history yet — log your starting weight</div>`;
+      }
+    }
+
     html += `
       <div class="exercise-item ${section === 'warmup' ? 'exercise-warmup' : ''} ${section === 'finisher' ? 'exercise-finisher' : ''}">
         <input type="checkbox" class="exercise-check" data-ex="${exKey}" ${checked}>
         <div class="exercise-info">
           <div class="exercise-name">${ex.name}</div>
           <div class="exercise-detail">${ex.sets}</div>
+          ${targetHtml}
         </div>
         ${showWeight ? `
         <div class="exercise-weight">
@@ -638,6 +745,19 @@ function renderWorkout(workoutId) {
   $$('.weight-input').forEach(inp => {
     inp.addEventListener('change', () => saveWorkoutState());
     inp.addEventListener('blur', () => saveWorkoutState());
+  });
+  // Tap target chip → prefill the matching input
+  $$('.exercise-target[data-target-for]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const exKey = chip.getAttribute('data-target-for');
+      const inp = $(`.weight-input[data-ex="${exKey}"]`);
+      if (!inp) return;
+      const m = chip.textContent.match(/Target:\s*(\d+(?:\.\d+)?)/);
+      if (m) {
+        inp.value = m[1];
+        inp.dispatchEvent(new Event('change'));
+      }
+    });
   });
 }
 
@@ -1537,6 +1657,20 @@ function renderPhaseTimeline() {
       </div>
     `;
   });
+
+  // Current phase guidance
+  const ph = getPhase(week);
+  html += `
+    <div class="phase-guide-card phase-${ph.id}" style="margin-top:12px;">
+      <div class="phase-guide-row">
+        <span class="phase-guide-name">${ph.name}</span>
+        <span class="phase-guide-week">Week ${week} · ${ph.weeks}</span>
+      </div>
+      <div class="phase-guide-headline">${ph.headline}</div>
+      <div class="phase-guide-tip">Main lifts: ${ph.mainPct} · ${ph.tip}</div>
+    </div>
+  `;
+
   $('#phaseTimeline').innerHTML = html;
 }
 
@@ -1705,47 +1839,47 @@ function getAllWeightedExercises() {
   return Array.from(set);
 }
 
-// Build per-exercise weight history from saved workouts
+// Build per-exercise weight history from saved workouts.
+// PRECISE matching: each saved record has workoutId/workoutName from v4 onward,
+// so we look up the exact workout definition and map ex_0..ex_n -> exercise name.
+// Fallback for legacy records (no workoutName): infer workoutId from the date's day-of-week.
 function getLiftHistoryAuto() {
   const workouts = LS.get('workouts') || {};
   const history = {}; // { exerciseName: [{date, weight}, ...] }
 
-  // We need to map exKey index -> exercise name per workout id
-  // Workout entries don't currently store which workout was rendered,
-  // so we cross-reference by matching weights across all WORKOUTS
-  const allExByWorkout = {};
+  // Build name→workoutDef lookup across both regular and travel workout sets
+  const nameToWorkout = {};
   [WORKOUTS, TRAVEL_WORKOUTS].forEach(ws => {
-    Object.values(ws).forEach(w => {
-      w.exercises.forEach((ex, i) => {
-        const show = (ex.section === 'main' || ex.section === 'accessory' ||
-          (ex.section === 'finisher' && finisherUsesWeight(ex.name))) && !isBodyweightExercise(ex.name);
-        if (!show) return;
-        const exKey = 'ex_' + i;
-        if (!allExByWorkout[w.name]) allExByWorkout[w.name] = {};
-        allExByWorkout[w.name][exKey] = ex.name;
-      });
-    });
+    Object.values(ws).forEach(w => { nameToWorkout[w.name] = w; });
   });
 
-  // For each saved workout day, try to attribute weights to exercise names
   Object.entries(workouts).sort(([a],[b]) => a.localeCompare(b)).forEach(([date, wo]) => {
     if (!wo || !wo.exercises) return;
-    // Try each workout definition to find one whose key count matches this saved workout
-    const savedKeys = Object.keys(wo.exercises);
-    // Match by finding a workout whose total exercise count is >= max index in saved keys
-    // Best heuristic: use the workout that has the most matching indices with weight > 0
-    let bestWorkoutExMap = null;
-    let bestScore = -1;
-    Object.values(allExByWorkout).forEach(exMap => {
-      const score = savedKeys.filter(k => exMap[k]).length;
-      if (score > bestScore) { bestScore = score; bestWorkoutExMap = exMap; }
-    });
-    if (!bestWorkoutExMap) return;
-    savedKeys.forEach(exKey => {
-      const ex = wo.exercises[exKey];
+
+    // 1) Resolve which workout definition this record came from
+    let workoutDef = null;
+    if (wo.workoutName && nameToWorkout[wo.workoutName]) {
+      workoutDef = nameToWorkout[wo.workoutName];
+    } else {
+      // Fallback: derive workoutId from the date's day-of-week
+      const dowId = getWorkoutIdForDate(date);
+      if (dowId !== null && WORKOUTS[dowId]) workoutDef = WORKOUTS[dowId];
+    }
+    if (!workoutDef) return;
+
+    // 2) For each saved entry, look up the EXACT exercise at that index
+    Object.entries(wo.exercises).forEach(([exKey, ex]) => {
       if (!ex || !ex.weight || ex.weight <= 0) return;
-      const name = bestWorkoutExMap[exKey];
-      if (!name) return;
+      const idx = parseInt(exKey.replace('ex_', ''), 10);
+      if (isNaN(idx)) return;
+      const exDef = workoutDef.exercises[idx];
+      if (!exDef) return;
+      // Only track weighted lifts (skip warmups/bodyweight)
+      const tracks = (exDef.section === 'main' || exDef.section === 'accessory' ||
+        (exDef.section === 'finisher' && finisherUsesWeight(exDef.name))) &&
+        !isBodyweightExercise(exDef.name);
+      if (!tracks) return;
+      const name = exDef.name;
       if (!history[name]) history[name] = [];
       history[name].push({ date, weight: ex.weight });
     });

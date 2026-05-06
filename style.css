@@ -1481,3 +1481,75 @@ a:hover { text-decoration: underline; }
   width: 20px;
   height: 20px;
 }
+
+/* ── v6: Phase guidance card + per-exercise target hint ── */
+.phase-guide-card {
+  background: var(--color-surface-alt, #f4f1ec);
+  border: 1px solid var(--color-border, #d8d3c8);
+  border-left: 4px solid var(--color-accent, #1f5f5c);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  font-size: var(--text-sm, 14px);
+}
+.phase-guide-card.phase-deload { border-left-color: #b86b3a; }
+.phase-guide-card.phase-peak { border-left-color: #8a3a3a; }
+.phase-guide-card.phase-foundation { border-left-color: #4a7a8a; }
+.phase-guide-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.phase-guide-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-text, #1a1a1a);
+  font-size: var(--text-base, 15px);
+}
+.phase-guide-week {
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted, #6b6b6b);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.phase-guide-headline {
+  font-weight: 500;
+  color: var(--color-text, #1a1a1a);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.phase-guide-tip {
+  color: var(--color-text-muted, #6b6b6b);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.4;
+}
+
+/* Per-exercise target weight chip */
+.exercise-target {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: rgba(31, 95, 92, 0.08);
+  border: 1px dashed rgba(31, 95, 92, 0.35);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-accent, #1f5f5c);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.exercise-target:hover,
+.exercise-target:active {
+  background: rgba(31, 95, 92, 0.16);
+  border-style: solid;
+}
+.exercise-target-empty {
+  color: var(--color-text-muted, #6b6b6b);
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+  font-style: italic;
+}
+.exercise-target-empty:hover { background: transparent; }
