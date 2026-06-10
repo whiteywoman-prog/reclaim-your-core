@@ -199,10 +199,10 @@ const CloudSync = {
     }
   },
 
-  // Schedule a debounced push (after 1.2s of quiet)
+  // Push almost immediately on every change (tiny 250ms debounce just to
+  // batch a flurry of edits like updating totals + entries together).
   scheduleSave() {
     if (!this.session || this.isApplyingRemote) return;
-    // Immediately mark as dirty/saving so the badge reflects pending work
     this.status = 'syncing';
     this._badge();
     if (this.saveTimer) clearTimeout(this.saveTimer);
@@ -216,7 +216,7 @@ const CloudSync = {
         this.status = 'error';
         this._badge();
       });
-    }, 1200);
+    }, 250);
   },
 
   // Flush any pending debounced save immediately. Returns a promise.
