@@ -2513,14 +2513,28 @@ window.toggleTravelMode = toggleTravelMode;
   });
   document.getElementById('accountSyncNow').addEventListener('click', async () => {
     try {
-      await CloudSync.push(CloudSync.buildLocalBlob());
+      CloudSync.status = 'syncing';
+      CloudSync._badge();
+      // Refresh token first if needed, so we don't 401 silently
+      if (CloudSync.session && CloudSync.session.expires_at && CloudSync.session.expires_at * 1000 < Date.now() + 30000) {
+        await CloudSync.refresh();
+      }
+      // PULL FIRST so cloud data merges INTO local (instead of phone's stale blob overwriting laptop's fresh data)
       const cloud = await CloudSync.pull();
       if (cloud && cloud.data) CloudSync.applyRemote(cloud.data);
+      // Then push the merged result back so cloud has everything
+      await CloudSync.push(CloudSync.buildLocalBlob());
+      CloudSync.status = 'synced';
+      CloudSync._badge();
       try { renderToday(); } catch {}
+      try { renderNutrition(); } catch {}
       try { renderProgress(); } catch {}
       try { renderHistoryTab(); } catch {}
+      try { renderSupplements(); } catch {}
       showAccountSheet();
     } catch (err) {
+      CloudSync.status = 'error';
+      CloudSync._badge();
       alert('Sync failed: ' + err.message);
     }
   });
