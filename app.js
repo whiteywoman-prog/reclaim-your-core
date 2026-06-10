@@ -155,10 +155,30 @@ const CloudSync = {
     try {
       SYNC_KEYS.forEach(k => {
         if (!(k in remote)) return;
-        // For date-keyed maps, merge by key (cloud wins per-key)
+        // For date-keyed maps, merge by key (cloud wins per-key for past dates,
+        // but for nutrition (`protein`) merge entries on today's date so neither
+        // device loses data when both edited the same day.)
         if (['workouts', 'skipped_days', 'supplements', 'habits', 'lifts', 'protein', 'measurements'].indexOf(k) !== -1) {
           const local = LS.get(k) || {};
           const merged = Object.assign({}, local, remote[k]);
+          if (k === 'protein') {
+            const today = todayKey();
+            const localToday = local[today];
+            const cloudToday = (remote[k] || {})[today];
+            if (localToday && cloudToday && Array.isArray(localToday.entries) && Array.isArray(cloudToday.entries)) {
+              const seen = {};
+              const allEntries = [];
+              [...cloudToday.entries, ...localToday.entries].forEach(e => {
+                const sig = (e.name || '') + '|' + (e.time || '') + '|' + (e.protein || 0) + '|' + (e.calories || 0);
+                if (!seen[sig]) { seen[sig] = true; allEntries.push(e); }
+              });
+              const totals = allEntries.reduce((a, e) => {
+                a.protein += (e.protein || 0); a.calories += (e.calories || 0);
+                a.carbs += (e.carbs || 0); a.fat += (e.fat || 0); return a;
+              }, { protein: 0, calories: 0, carbs: 0, fat: 0 });
+              merged[today] = { entries: allEntries, totals };
+            }
+          }
           LS.set(k, merged);
         } else if (k === 'myFoods') {
           // myFoods is an array — merge by name (case-insensitive), cloud wins on duplicates
@@ -182,12 +202,38 @@ const CloudSync = {
   // Schedule a debounced push (after 1.2s of quiet)
   scheduleSave() {
     if (!this.session || this.isApplyingRemote) return;
+    // Immediately mark as dirty/saving so the badge reflects pending work
+    this.status = 'syncing';
+    this._badge();
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      this.push(this.buildLocalBlob()).catch(err => {
+      this.saveTimer = null;
+      this.push(this.buildLocalBlob()).then(() => {
+        this.status = 'synced';
+        this._badge();
+      }).catch(err => {
         console.warn('Cloud sync error:', err.message);
+        this.status = 'error';
+        this._badge();
       });
     }, 1200);
+  },
+
+  // Flush any pending debounced save immediately. Returns a promise.
+  async flush() {
+    if (!this.session || this.isApplyingRemote) return;
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      try {
+        await this.push(this.buildLocalBlob());
+        this.status = 'synced';
+        this._badge();
+      } catch (err) {
+        this.status = 'error';
+        this._badge();
+      }
+    }
   },
 
   // First-run sync: pull, merge, push back the merged result
@@ -2557,13 +2603,41 @@ window.toggleTravelMode = toggleTravelMode;
     CloudSync._badge();
     CloudSync.initialSync().then(() => {
       try { renderToday(); } catch {}
+      try { renderNutrition(); } catch {}
       try { renderProgress(); } catch {}
       try { renderHistoryTab(); } catch {}
+      try { renderSupplements(); } catch {}
     });
   } else if (!LS.get('auth_skipped')) {
     // First-time visitor: gently surface the sign-in prompt
     setTimeout(showAuthModal, 250);
   }
+
+  // Safari on iOS suspends background pages aggressively, which can kill pending
+  // debounced pushes. Flush immediately when the page is hidden, and pull fresh
+  // data when the page comes back into view.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      CloudSync.flush();
+    } else if (document.visibilityState === 'visible' && CloudSync.session) {
+      // Pull fresh data from cloud so we see edits made on other devices
+      CloudSync.pull().then(cloud => {
+        if (cloud && cloud.data) {
+          CloudSync.applyRemote(cloud.data);
+          try { renderToday(); } catch {}
+          try { renderNutrition(); } catch {}
+          try { renderProgress(); } catch {}
+          try { renderHistoryTab(); } catch {}
+          try { renderSupplements(); } catch {}
+          CloudSync.status = 'synced';
+          CloudSync._badge();
+        }
+      }).catch(() => {});
+    }
+  });
+  // pagehide is more reliable on iOS Safari for "about to suspend"
+  window.addEventListener('pagehide', () => { CloudSync.flush(); });
+  window.addEventListener('beforeunload', () => { CloudSync.flush(); });
 })();
 
 renderToday();
