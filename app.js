@@ -29,14 +29,34 @@ const CloudSync = {
   saveTimer: null,
   isApplyingRemote: false, // when true, LS.set won't push back to cloud
 
-  async _fetch(path, opts = {}) {
+  async _fetch(path, opts = {}, _retried) {
     const headers = Object.assign({
       'apikey': SUPABASE_KEY,
       'Content-Type': 'application/json',
     }, opts.headers || {});
     if (this.session) headers['Authorization'] = 'Bearer ' + this.session.access_token;
     const res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers }));
+    // If unauthorized AND we have a refresh token AND this isn't already a retry, try refreshing once.
+    if (res.status === 401 && !_retried && this.session && this.session.refresh_token && !path.startsWith('/auth/v1/')) {
+      const refreshed = await this.refresh();
+      if (refreshed) return this._fetch(path, opts, true);
+    }
     return res;
+  },
+
+  async refresh() {
+    if (!this.session || !this.session.refresh_token) return false;
+    try {
+      const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: this.session.refresh_token }),
+      });
+      if (!res.ok) return false;
+      const j = await res.json();
+      if (j.access_token) { this.saveSession(j); return true; }
+    } catch {}
+    return false;
   },
 
   loadSession() {
@@ -44,8 +64,8 @@ const CloudSync = {
       const raw = _ls ? _ls.getItem('rcyc_session') : null;
       if (raw) {
         const s = JSON.parse(raw);
-        // expires_at is a unix epoch in seconds
-        if (s.expires_at && s.expires_at * 1000 > Date.now()) {
+        // Keep the session even if access_token is expired — refresh() can revive it.
+        if (s && (s.access_token || s.refresh_token)) {
           this.session = s;
           return true;
         }
@@ -176,6 +196,10 @@ const CloudSync = {
     try {
       this.status = 'syncing';
       this._badge();
+      // If the access token looks expired, refresh proactively before any API call.
+      if (this.session.expires_at && this.session.expires_at * 1000 < Date.now() + 30000) {
+        await this.refresh();
+      }
       const cloud = await this.pull();
       if (cloud && cloud.data && Object.keys(cloud.data).length > 0) {
         this.applyRemote(cloud.data);
@@ -188,6 +212,11 @@ const CloudSync = {
       console.warn('Initial sync error:', err.message);
       this.status = 'error';
       this._badge();
+      // If the refresh token is also dead, force re-sign-in.
+      if (/401|invalid|expired|refresh/i.test(err.message || '')) {
+        this.saveSession(null);
+        if (typeof showAuthModal === 'function') showAuthModal();
+      }
     }
   },
 
