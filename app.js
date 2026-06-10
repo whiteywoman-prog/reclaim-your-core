@@ -2639,7 +2639,7 @@ window.toggleTravelMode = toggleTravelMode;
   window.addEventListener('pagehide', () => { CloudSync.flush(); });
   window.addEventListener('beforeunload', () => { CloudSync.flush(); });
 
-  // Periodic background pull (every 30s while page is visible) so changes from
+  // Periodic background pull (every 10s while page is visible) so changes from
   // another device appear without the user having to manually sync.
   setInterval(() => {
     if (!CloudSync.session) return;
@@ -2647,20 +2647,18 @@ window.toggleTravelMode = toggleTravelMode;
     if (CloudSync.saveTimer) return; // don't pull while a local push is pending
     CloudSync.pull().then(cloud => {
       if (!cloud || !cloud.data) return;
-      // Only re-render if the cloud blob's updated_at is newer than what we last applied
-      const last = LS.get('last_remote_at') || 0;
-      const cur = cloud.updated_at ? new Date(cloud.updated_at).getTime() : 0;
-      if (cur && cur > last) {
-        CloudSync.applyRemote(cloud.data);
-        LS.set('last_remote_at', cur);
-        try { renderToday(); } catch {}
-        try { renderNutrition(); } catch {}
-        try { renderProgress(); } catch {}
-        try { renderHistoryTab(); } catch {}
-        try { renderSupplements(); } catch {}
-      }
-    }).catch(() => {});
-  }, 30000);
+      // Always merge — the merge logic is safe (date-keyed maps, dedupe entries)
+      // and re-rendering identical data is harmless.
+      CloudSync.applyRemote(cloud.data);
+      try { renderToday(); } catch {}
+      try { renderNutrition(); } catch {}
+      try { renderProgress(); } catch {}
+      try { renderHistoryTab(); } catch {}
+      try { renderSupplements(); } catch {}
+    }).catch(err => {
+      console.warn('Auto-poll error:', err && err.message);
+    });
+  }, 10000);
 })();
 
 renderToday();
