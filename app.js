@@ -210,6 +210,7 @@ const CloudSync = {
       this.saveTimer = null;
       this.push(this.buildLocalBlob()).then(() => {
         this.status = 'synced';
+        this.lastSyncAt = Date.now();
         this._badge();
       }).catch(err => {
         console.warn('Cloud sync error:', err.message);
@@ -270,8 +271,13 @@ const CloudSync = {
     const el = document.getElementById('sync-badge');
     if (!el) return;
     if (!this.session) { el.textContent = ''; el.className = 'sync-badge'; return; }
-    const text = { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error', offline: '' }[this.status] || '';
-    el.textContent = text;
+    let text = { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error', offline: '' }[this.status] || '';
+    if (this.status === 'synced' && this.lastSyncAt) {
+      const ago = Math.floor((Date.now() - this.lastSyncAt) / 1000);
+      if (ago < 60) text = 'Synced ' + ago + 's ago';
+      else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
+    }
+    el.textContent = text + ' · v7.8';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -2639,26 +2645,37 @@ window.toggleTravelMode = toggleTravelMode;
   window.addEventListener('pagehide', () => { CloudSync.flush(); });
   window.addEventListener('beforeunload', () => { CloudSync.flush(); });
 
-  // Periodic background pull (every 10s while page is visible) so changes from
+  // Periodic background pull (every 8s while page is visible) so changes from
   // another device appear without the user having to manually sync.
-  setInterval(() => {
+  async function autoPoll() {
     if (!CloudSync.session) return;
     if (document.visibilityState !== 'visible') return;
     if (CloudSync.saveTimer) return; // don't pull while a local push is pending
-    CloudSync.pull().then(cloud => {
+    try {
+      // Refresh token proactively if expired
+      if (CloudSync.session.expires_at && CloudSync.session.expires_at * 1000 < Date.now() + 30000) {
+        await CloudSync.refresh();
+      }
+      const cloud = await CloudSync.pull();
       if (!cloud || !cloud.data) return;
-      // Always merge — the merge logic is safe (date-keyed maps, dedupe entries)
-      // and re-rendering identical data is harmless.
       CloudSync.applyRemote(cloud.data);
+      CloudSync.lastSyncAt = Date.now();
+      CloudSync.status = 'synced';
+      CloudSync._badge();
       try { renderToday(); } catch {}
       try { renderNutrition(); } catch {}
       try { renderProgress(); } catch {}
       try { renderHistoryTab(); } catch {}
       try { renderSupplements(); } catch {}
-    }).catch(err => {
+    } catch (err) {
       console.warn('Auto-poll error:', err && err.message);
-    });
-  }, 10000);
+      CloudSync.status = 'error';
+      CloudSync._badge();
+    }
+  }
+  setInterval(autoPoll, 8000);
+  // Tick the badge every 5s so "Synced Ns ago" updates
+  setInterval(() => { if (CloudSync.session && CloudSync.status === 'synced') CloudSync._badge(); }, 5000);
 })();
 
 renderToday();
