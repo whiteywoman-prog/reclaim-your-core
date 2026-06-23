@@ -292,7 +292,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.1';
+    el.textContent = text + ' · v8.2';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -460,6 +460,167 @@ function updateTravelBtn() {
 }
 
 // ── Workout Data ──
+// ── Phase-rotating accessories ──
+// Anchor lifts (warm-up + main + finisher) stay constant; accessories rotate by phase.
+// Indices stay stable per workout so existing index-keyed logs map correctly.
+const PHASE_ACCESSORIES = {
+  1: { // Monday — Push
+    foundation: [
+      { name: 'Incline DB Press', sets: '3×8–10', section: 'accessory' },
+      { name: 'Cable Lateral Raises', sets: '3×10–12', section: 'accessory' },
+      { name: 'Tricep Dips', sets: '3×8–10', section: 'accessory' },
+    ],
+    building: [
+      { name: 'Incline DB Press', sets: '3×8–10', section: 'accessory' },
+      { name: 'Cable Lateral Raises', sets: '3×10–12', section: 'accessory' },
+      { name: 'Tricep Dips', sets: '3×8–10', section: 'accessory' },
+    ],
+    intensify: [
+      { name: 'Close-Grip Bench Press', sets: '3×6–8', section: 'accessory' },
+      { name: 'DB Shoulder Press', sets: '3×8–10', section: 'accessory' },
+      { name: 'Overhead Tricep Extension (DB)', sets: '3×10–12', section: 'accessory' },
+    ],
+    deload: [
+      { name: 'Push-ups', sets: '3×10', section: 'accessory' },
+      { name: 'Lateral Raises (light)', sets: '3×12', section: 'accessory' },
+      { name: 'Tricep Pushdowns (light)', sets: '3×12', section: 'accessory' },
+    ],
+    peak: [
+      { name: 'Weighted Dips', sets: '3×6–8', section: 'accessory' },
+      { name: 'Arnold Press', sets: '3×6–8', section: 'accessory' },
+      { name: 'Skullcrushers', sets: '3×8–10', section: 'accessory' },
+    ],
+  },
+  2: { // Tuesday — Quad/Glute (cycling-focused)
+    foundation: [
+      { name: 'Bulgarian Split Squat (DB)', sets: '3×8–10 each', section: 'accessory' },
+      { name: 'Leg Press', sets: '3×10–12', section: 'accessory' },
+      { name: 'Hip Thrust (Barbell)', sets: '3×8–10', section: 'accessory' },
+    ],
+    building: [
+      { name: 'Bulgarian Split Squat (DB)', sets: '3×8–10 each', section: 'accessory' },
+      { name: 'Leg Press', sets: '3×10–12', section: 'accessory' },
+      { name: 'Hip Thrust (Barbell)', sets: '3×8–10', section: 'accessory' },
+    ],
+    intensify: [
+      { name: 'Bulgarian Split Squat (DB)', sets: '4×6–8 each', section: 'accessory' },
+      { name: 'Walking Lunges (DB)', sets: '3×10 each', section: 'accessory' },
+      { name: 'Hip Thrust (Barbell)', sets: '4×6–8', section: 'accessory' },
+    ],
+    deload: [
+      { name: 'Step-ups (light DB)', sets: '3×10 each', section: 'accessory' },
+      { name: 'Bodyweight Squats', sets: '3×12', section: 'accessory' },
+      { name: 'Glute Bridges', sets: '3×12', section: 'accessory' },
+    ],
+    peak: [
+      { name: 'Bulgarian Split Squat (DB)', sets: '4×5–6 each PR', section: 'accessory' },
+      { name: 'Front-Foot-Elevated Reverse Lunge', sets: '3×8 each', section: 'accessory' },
+      { name: 'Hip Thrust (Barbell)', sets: '4×5–6 PR', section: 'accessory' },
+    ],
+  },
+  4: { // Thursday — Pull
+    foundation: [
+      { name: 'Seated Cable Row', sets: '3×8–10', section: 'accessory' },
+      { name: 'Face Pulls', sets: '3×12–15', section: 'accessory' },
+      { name: 'DB Bicep Curls', sets: '3×8–10', section: 'accessory' },
+    ],
+    building: [
+      { name: 'Seated Cable Row', sets: '3×8–10', section: 'accessory' },
+      { name: 'Face Pulls', sets: '3×12–15', section: 'accessory' },
+      { name: 'DB Bicep Curls', sets: '3×8–10', section: 'accessory' },
+    ],
+    intensify: [
+      { name: 'Chest-Supported DB Row', sets: '3×8–10', section: 'accessory' },
+      { name: 'Reverse Pec Deck', sets: '3×12–15', section: 'accessory' },
+      { name: 'Hammer Curls', sets: '3×8–10', section: 'accessory' },
+    ],
+    deload: [
+      { name: 'Inverted Rows', sets: '3×10', section: 'accessory' },
+      { name: 'Band Pull-Aparts', sets: '3×15', section: 'accessory' },
+      { name: 'DB Bicep Curls (light)', sets: '3×12', section: 'accessory' },
+    ],
+    peak: [
+      { name: 'Pendlay Row', sets: '4×5–6', section: 'accessory' },
+      { name: 'Weighted Chin-ups', sets: '3×5–6', section: 'accessory' },
+      { name: 'Incline DB Curls', sets: '3×8–10', section: 'accessory' },
+    ],
+  },
+  5: { // Friday — Hinge (cycling-focused)
+    foundation: [
+      { name: 'Single-Leg RDL (DB)', sets: '3×8–10 each', section: 'accessory' },
+      { name: 'Glute-Ham Raise or Nordic Curl', sets: '3×6–8', section: 'accessory' },
+      { name: 'Standing Calf Raises', sets: '3×12–15', section: 'accessory' },
+    ],
+    building: [
+      { name: 'Single-Leg RDL (DB)', sets: '3×8–10 each', section: 'accessory' },
+      { name: 'Glute-Ham Raise or Nordic Curl', sets: '3×6–8', section: 'accessory' },
+      { name: 'Standing Calf Raises', sets: '3×12–15', section: 'accessory' },
+    ],
+    intensify: [
+      { name: 'Single-Leg RDL (DB)', sets: '4×6–8 each', section: 'accessory' },
+      { name: 'Good Mornings', sets: '3×8–10', section: 'accessory' },
+      { name: 'Seated Calf Raises (heavy)', sets: '4×10–12', section: 'accessory' },
+    ],
+    deload: [
+      { name: 'Single-Leg RDL (BW)', sets: '3×10 each', section: 'accessory' },
+      { name: 'Back Extensions', sets: '3×12', section: 'accessory' },
+      { name: 'Calf Raises (BW)', sets: '3×15', section: 'accessory' },
+    ],
+    peak: [
+      { name: 'Single-Leg RDL (DB)', sets: '4×5–6 each PR', section: 'accessory' },
+      { name: 'Nordic Curl', sets: '3×6–8', section: 'accessory' },
+      { name: 'Standing Calf Raises (heavy)', sets: '4×8–10', section: 'accessory' },
+    ],
+  },
+};
+
+function resolveAccessories(workoutId, phaseId) {
+  const pool = PHASE_ACCESSORIES[workoutId];
+  if (!pool) return [];
+  return pool[phaseId] || pool.foundation || [];
+}
+
+// Build the active workout for today, composing phase-specific accessories.
+function resolveWorkoutForDate(workoutId, dateLike, travelMode) {
+  const ws = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
+  const base = ws[workoutId];
+  if (!base) return null;
+  // Travel & recovery (Wed) and any workout without a pool — return as-is
+  if (travelMode || !PHASE_ACCESSORIES[workoutId]) return base;
+  // Derive phase from program week for the given date
+  const wk = getProgramWeekForDate(dateLike);
+  const ph = getPhase(wk);
+  const accessories = resolveAccessories(workoutId, ph.id);
+  // Compose: warmup + main + accessories + finisher, preserving base order/section
+  const composed = [];
+  base.exercises.forEach(ex => {
+    if (ex.section !== 'accessory') composed.push(ex);
+  });
+  // Insert accessories in position where original accessories were (after main, before finisher)
+  const result = [];
+  let inserted = false;
+  base.exercises.forEach(ex => {
+    if (ex.section === 'accessory') {
+      if (!inserted) { accessories.forEach(a => result.push(a)); inserted = true; }
+      // skip original accessory
+    } else {
+      result.push(ex);
+    }
+  });
+  if (!inserted) accessories.forEach(a => result.push(a));
+  return { name: base.name, exercises: result };
+}
+
+// Program week for a specific historical date (used by lift history & rotation)
+function getProgramWeekForDate(dateLike) {
+  const settings = LS.get('settings') || {};
+  const start = settings.programStart || '2026-03-31';
+  const startDate = new Date(start + 'T12:00:00');
+  const target = (typeof dateLike === 'string') ? new Date(dateLike + 'T12:00:00') : new Date(dateLike);
+  const days = Math.floor((target - startDate) / (1000*60*60*24));
+  return Math.max(1, Math.floor(days / 7) + 1);
+}
+
 const WORKOUTS = {
   1: { // Monday — Upper Push
     name: 'Upper Body Push',
@@ -472,7 +633,7 @@ const WORKOUTS = {
       // Main Lifts — Heavy, 3–5 reps
       { name: 'Barbell Bench Press', sets: '4×4–5 @ 80–85% 1RM', section: 'main' },
       { name: 'Barbell Overhead Press', sets: '4×4–5 @ 80–85% 1RM', section: 'main' },
-      // Accessory Work — Moderate, 8–12 reps
+      // Accessory Work — Moderate, 8–12 reps (REPLACED AT RENDER TIME BY PHASE)
       { name: 'Incline DB Press', sets: '3×8–10', section: 'accessory' },
       { name: 'Cable Lateral Raises', sets: '3×10–12', section: 'accessory' },
       { name: 'Tricep Dips', sets: '3×8–10', section: 'accessory' },
@@ -497,6 +658,8 @@ const WORKOUTS = {
       { name: 'Hip Thrust (Barbell)', sets: '3×8–10', section: 'accessory' },
       // Finisher
       { name: 'Pallof Press', sets: '3×10 each side', section: 'finisher' },
+      { name: 'Aletha Mark — Hip Flexors (cool-down)', sets: '60–90 sec each side', section: 'finisher' },
+      { name: 'Aletha Orbit — Glutes (cool-down)', sets: '60–90 sec each side', section: 'finisher' },
     ]
   },
   3: { // Wednesday — Active Recovery
@@ -554,6 +717,8 @@ const WORKOUTS = {
       { name: 'Standing Calf Raises', sets: '3×12–15', section: 'accessory' },
       // Finisher
       { name: 'Hanging Leg Raises', sets: '3×8–10', section: 'finisher' },
+      { name: 'Aletha Mark — Hip Flexors (cool-down)', sets: '60–90 sec each side', section: 'finisher' },
+      { name: 'Aletha Orbit — Glutes + Piriformis (cool-down)', sets: '60–90 sec each side', section: 'finisher' },
     ]
   }
 };
@@ -858,7 +1023,8 @@ function getTargetWeight(exerciseName, section) {
 function renderWorkout(workoutId) {
   const settings = getSettings();
   const workoutSet = settings.travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
-  const workout = workoutSet[workoutId];
+  // Resolve phase-rotating accessories for today's date
+  const workout = resolveWorkoutForDate(workoutId, todayKey(), settings.travelMode) || workoutSet[workoutId];
   if (!workout) return;
 
   const key = todayKey();
@@ -1479,7 +1645,8 @@ function openHistoryDetail(key) {
   }
 
   const workoutSet = travelMode ? TRAVEL_WORKOUTS : WORKOUTS;
-  const workout = workoutSet[workoutId];
+  // Resolve phase-rotating accessories for THIS HISTORICAL DATE so names match what was logged
+  const workout = resolveWorkoutForDate(workoutId, key, travelMode) || workoutSet[workoutId];
   if (!workout) return;
 
   // Hide list card, show detail card
@@ -2380,13 +2547,24 @@ function getLiftHistoryAuto() {
     if (!wo || !wo.exercises) return;
 
     // 1) Resolve which workout definition this record came from
+    // Use phase-aware resolution so accessory names match what was logged that week.
     let workoutDef = null;
+    let workoutId = null;
     if (wo.workoutName && nameToWorkout[wo.workoutName]) {
       workoutDef = nameToWorkout[wo.workoutName];
+      // Try to find workoutId from base name
+      for (const [id, w] of Object.entries(WORKOUTS)) {
+        if (w.name === wo.workoutName) { workoutId = parseInt(id, 10); break; }
+      }
     } else {
       // Fallback: derive workoutId from the date's day-of-week
       const dowId = getWorkoutIdForDate(date);
-      if (dowId !== null && WORKOUTS[dowId]) workoutDef = WORKOUTS[dowId];
+      if (dowId !== null && WORKOUTS[dowId]) { workoutDef = WORKOUTS[dowId]; workoutId = dowId; }
+    }
+    // Re-resolve with phase rotation if we have a workoutId and not travel
+    if (workoutId !== null && !wo.travelMode) {
+      const resolved = resolveWorkoutForDate(workoutId, date, false);
+      if (resolved) workoutDef = resolved;
     }
     if (!workoutDef) return;
 
