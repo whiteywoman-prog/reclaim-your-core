@@ -277,7 +277,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v7.8';
+    el.textContent = text + ' · v7.9';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -339,8 +339,11 @@ $('[data-theme-toggle]').addEventListener('click', () => {
 // ── Tab Navigation ──
 const tabButtons = $$('[data-tab]');
 const tabContents = $$('.tab-content');
+let ACTIVE_TAB = 'today';
+window.getActiveTab = () => ACTIVE_TAB;
 
 function switchTab(tabName) {
+  ACTIVE_TAB = tabName;
   tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
   tabContents.forEach(c => c.classList.toggle('active', c.id === 'tab-' + tabName));
   // Refresh data on tab switch
@@ -349,6 +352,18 @@ function switchTab(tabName) {
   if (tabName === 'progress') renderProgress();
   if (tabName === 'supplements') renderSupplements();
   if (tabName === 'history') renderHistoryTab();
+}
+
+// Used by auto-poll to skip re-renders of tabs the user isn't viewing.
+// Critical: prevents background sync from closing forms/modals on inactive tabs.
+function safeRender(tabName, renderFn) {
+  if (ACTIVE_TAB !== tabName) return;
+  // Also don't re-render History if the detail editor is open
+  if (tabName === 'history') {
+    const detail = document.getElementById('history-detail-view');
+    if (detail && detail.style.display !== 'none') return;
+  }
+  try { renderFn(); } catch {}
 }
 
 tabButtons.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -1124,6 +1139,9 @@ function getHabitsData() {
 
 // ── HISTORY Tab ──
 function renderHistoryTab() {
+  // If the detail editor is open, do NOT re-render — it would yank the user out mid-edit.
+  const _detailView = document.getElementById('history-detail-view');
+  if (_detailView && _detailView.style.display !== 'none') return;
   const filter = LS.get('history_filter') || 'all';
   // sync active state on filter buttons
   document.querySelectorAll('.history-filter-btn').forEach(b => {
@@ -1176,11 +1194,14 @@ function renderHistoryTab() {
     rows.push({ key, dateLabel, status, statusLabel, woName });
   }
 
-  // Ensure detail view is hidden and list card is visible
+  // Only flip panels if detail isn't already open (don't kill an in-progress edit)
   const detailView = document.getElementById('history-detail-view');
-  if (detailView) detailView.style.display = 'none';
-  const listCard = document.getElementById('history-tab-list');
-  if (listCard && listCard.parentElement) listCard.parentElement.style.display = '';
+  const detailIsOpen = detailView && detailView.style.display !== 'none';
+  if (!detailIsOpen) {
+    if (detailView) detailView.style.display = 'none';
+    const listCard = document.getElementById('history-tab-list');
+    if (listCard && listCard.parentElement) listCard.parentElement.style.display = '';
+  }
 
   const list = document.getElementById('history-tab-list');
   if (!list) return;
@@ -2578,11 +2599,11 @@ window.toggleTravelMode = toggleTravelMode;
       await CloudSync.push(CloudSync.buildLocalBlob());
       CloudSync.status = 'synced';
       CloudSync._badge();
-      try { renderToday(); } catch {}
-      try { renderNutrition(); } catch {}
-      try { renderProgress(); } catch {}
-      try { renderHistoryTab(); } catch {}
-      try { renderSupplements(); } catch {}
+      safeRender('today', renderToday);
+      safeRender('nutrition', renderNutrition);
+      safeRender('progress', renderProgress);
+      safeRender('history', renderHistoryTab);
+      safeRender('supplements', renderSupplements);
       showAccountSheet();
     } catch (err) {
       CloudSync.status = 'error';
@@ -2630,11 +2651,11 @@ window.toggleTravelMode = toggleTravelMode;
       CloudSync.pull().then(cloud => {
         if (cloud && cloud.data) {
           CloudSync.applyRemote(cloud.data);
-          try { renderToday(); } catch {}
-          try { renderNutrition(); } catch {}
-          try { renderProgress(); } catch {}
-          try { renderHistoryTab(); } catch {}
-          try { renderSupplements(); } catch {}
+          safeRender('today', renderToday);
+          safeRender('nutrition', renderNutrition);
+          safeRender('progress', renderProgress);
+          safeRender('history', renderHistoryTab);
+          safeRender('supplements', renderSupplements);
           CloudSync.status = 'synced';
           CloudSync._badge();
         }
@@ -2662,11 +2683,12 @@ window.toggleTravelMode = toggleTravelMode;
       CloudSync.lastSyncAt = Date.now();
       CloudSync.status = 'synced';
       CloudSync._badge();
-      try { renderToday(); } catch {}
-      try { renderNutrition(); } catch {}
-      try { renderProgress(); } catch {}
-      try { renderHistoryTab(); } catch {}
-      try { renderSupplements(); } catch {}
+      // Only re-render the currently-viewed tab (others render on tab switch)
+      safeRender('today', renderToday);
+      safeRender('nutrition', renderNutrition);
+      safeRender('progress', renderProgress);
+      safeRender('history', renderHistoryTab);
+      safeRender('supplements', renderSupplements);
     } catch (err) {
       console.warn('Auto-poll error:', err && err.message);
       CloudSync.status = 'error';
