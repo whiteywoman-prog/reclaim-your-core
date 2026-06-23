@@ -71,6 +71,14 @@
           <div class="workout-action-row" id="workout-action-row"></div>
         </div>
 
+        <div class="card" id="cardio-card">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0" id="cardio-title">Cardio</h3>
+            <button class="btn-add" id="cardioAddBtn" type="button">+ Add</button>
+          </div>
+          <div id="cardio-list"></div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h3 class="section-title" style="margin-bottom:0">Daily Habits</h3>
@@ -343,6 +351,13 @@
           <div class="chart-container mt-4">
             <canvas id="liftChart"></canvas>
           </div>
+        </div>
+
+        <div class="card" id="cardio-summary-card">
+          <div class="card-header">
+            <h3 class="section-title" style="margin-bottom:0">Cardio (last 4 weeks)</h3>
+          </div>
+          <div id="cardio-summary"></div>
         </div>
       </div>
 
@@ -738,6 +753,51 @@
   </div>
 
   <!-- Account sheet: appears when signed in and user taps the account icon -->
+  <div id="cardioModal" class="auth-modal" hidden>
+    <div class="auth-card">
+      <h2 class="auth-title" id="cardioModalTitle">Add cardio</h2>
+      <form id="cardioForm" class="auth-form" onsubmit="return false;">
+        <label class="auth-label">Activity
+          <select id="cardioActivity" class="auth-input">
+            <option value="Cycling">Cycling</option>
+            <option value="Walking">Walking</option>
+            <option value="Hiking">Hiking</option>
+            <option value="Running">Running</option>
+            <option value="Rowing">Rowing</option>
+            <option value="Swimming">Swimming</option>
+          </select>
+        </label>
+        <label class="auth-label">Duration (minutes)
+          <input id="cardioDuration" class="auth-input" type="number" min="0" step="1" inputmode="numeric" placeholder="30">
+        </label>
+        <div id="cardioDistanceWrap">
+          <label class="auth-label"><span id="cardioDistanceLabel">Distance (miles)</span>
+            <input id="cardioDistance" class="auth-input" type="number" min="0" step="0.1" inputmode="decimal" placeholder="">
+          </label>
+        </div>
+        <div id="cardioStationaryWrap" style="display:none;">
+          <label class="auth-label" style="flex-direction:row;align-items:center;gap:8px;">
+            <input id="cardioStationary" type="checkbox" style="width:auto;margin:0;">
+            <span style="margin:0;">Stationary (swim harness in pool)</span>
+          </label>
+        </div>
+        <label class="auth-label">Intensity
+          <select id="cardioIntensity" class="auth-input">
+            <option value="Warm-up">Warm-up</option>
+            <option value="Endurance">Endurance</option>
+            <option value="Recovery">Recovery</option>
+          </select>
+        </label>
+        <label class="auth-label">Notes (optional)
+          <input id="cardioNotes" class="auth-input" type="text" placeholder="Black Mountain loop">
+        </label>
+        <div class="auth-error" id="cardioError" hidden></div>
+        <button type="submit" class="btn btn-primary" id="cardioSaveBtn">Save</button>
+        <button type="button" class="btn-text" id="cardioCancel">Cancel</button>
+      </form>
+    </div>
+  </div>
+
   <div id="accountSheet" class="auth-modal" hidden>
     <div class="auth-card">
       <h2 class="auth-title">Account</h2>

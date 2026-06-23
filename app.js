@@ -20,7 +20,7 @@ const SUPABASE_KEY = 'sb_publishable_KUGATGbP7oBLa6g3Velf3w_rl2gXWRn';
 const SYNC_KEYS = [
   'settings', 'programWeek', 'workouts', 'skipped_days',
   'supplements', 'theme', 'habits', 'lifts', 'protein',
-  'measurements', 'myFoods'
+  'measurements', 'myFoods', 'cardio'
 ];
 
 const CloudSync = {
@@ -158,9 +158,24 @@ const CloudSync = {
         // For date-keyed maps, merge by key (cloud wins per-key for past dates,
         // but for nutrition (`protein`) merge entries on today's date so neither
         // device loses data when both edited the same day.)
-        if (['workouts', 'skipped_days', 'supplements', 'habits', 'lifts', 'protein', 'measurements'].indexOf(k) !== -1) {
+        if (['workouts', 'skipped_days', 'supplements', 'habits', 'lifts', 'protein', 'measurements', 'cardio'].indexOf(k) !== -1) {
           const local = LS.get(k) || {};
           const merged = Object.assign({}, local, remote[k]);
+          if (k === 'cardio') {
+            // For each date, union entries by id (so both devices' adds survive)
+            const allDates = new Set([...Object.keys(local), ...Object.keys(remote[k] || {})]);
+            allDates.forEach(date => {
+              const localArr = Array.isArray(local[date]) ? local[date] : [];
+              const cloudArr = Array.isArray((remote[k] || {})[date]) ? (remote[k] || {})[date] : [];
+              const seen = {};
+              const out = [];
+              [...cloudArr, ...localArr].forEach(e => {
+                const id = e.id || (e.activity + '|' + e.ts);
+                if (!seen[id]) { seen[id] = true; out.push(e); }
+              });
+              merged[date] = out;
+            });
+          }
           if (k === 'protein') {
             const today = todayKey();
             const localToday = local[today];
@@ -277,7 +292,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v7.9';
+    el.textContent = text + ' · v8.0';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -699,6 +714,9 @@ function renderToday() {
     }
   }
 
+  // Cardio
+  renderCardioSection();
+
   // Habits
   renderHabits();
 
@@ -1098,6 +1116,167 @@ function renderCyclingDay() {
     </div>
   `;
 }
+
+// ── Cardio Module ──
+const CARDIO_ACTIVITIES = ['Walking','Hiking','Running','Rowing','Swimming','Cycling'];
+const CARDIO_ICONS = {
+  Walking: '🚶‍♀️',
+  Hiking: '🥾',
+  Running: '🏃‍♀️',
+  Rowing: '🚣‍♀️',
+  Swimming: '🏊‍♀️',
+  Cycling: '🚴‍♀️',
+};
+
+function getCardioForDate(dateKey) {
+  const all = LS.get('cardio') || {};
+  return Array.isArray(all[dateKey]) ? all[dateKey] : [];
+}
+function setCardioForDate(dateKey, arr) {
+  const all = LS.get('cardio') || {};
+  all[dateKey] = arr;
+  LS.set('cardio', all);
+}
+
+// Default intensity & activity for a given day type
+function cardioDefaults(dateKey) {
+  const d = new Date(dateKey + 'T12:00:00');
+  const dow = d.getDay(); // 0=Sun,6=Sat
+  if (dow === 0 || dow === 6) return { intensity: 'Endurance', activity: 'Cycling' };
+  if (dow === 3) return { intensity: 'Recovery', activity: 'Walking' };
+  return { intensity: 'Warm-up', activity: 'Walking' };
+}
+
+function distanceUnitFor(activity) {
+  if (activity === 'Swimming') return 'yards';
+  return 'miles';
+}
+function showsDistance(activity, stationary) {
+  if (activity === 'Swimming' && stationary) return false;
+  return true;
+}
+
+function renderCardioSection() {
+  const key = todayKey();
+  const entries = getCardioForDate(key);
+  const titleEl = document.getElementById('cardio-title');
+  const listEl = document.getElementById('cardio-list');
+  if (!listEl) return;
+  // Title varies by day type
+  const d = new Date(key + 'T12:00:00');
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) titleEl.textContent = 'Cardio (cycling day)';
+  else if (dow === 3) titleEl.textContent = 'Cardio (recovery)';
+  else titleEl.textContent = 'Cardio warm-up';
+
+  if (!entries.length) {
+    listEl.innerHTML = '<div class="cardio-empty">No cardio logged yet today.</div>';
+  } else {
+    listEl.innerHTML = entries.map(e => {
+      const icon = CARDIO_ICONS[e.activity] || '⚡';
+      const dist = (e.distance && showsDistance(e.activity, e.stationary))
+        ? `${e.distance} ${e.distanceUnit || distanceUnitFor(e.activity)} · `
+        : '';
+      const dur = e.durationMin ? `${e.durationMin} min` : '';
+      const intensityClass = (e.intensity || 'warm-up').toLowerCase().replace('-','');
+      return `
+      <div class="cardio-item">
+        <div class="cardio-item-icon">${icon}</div>
+        <div class="cardio-item-info">
+          <div class="cardio-item-title">${e.activity}<span class="cardio-intensity-tag cardio-intensity-${intensityClass}">${e.intensity || ''}</span></div>
+          <div class="cardio-item-meta">${dist}${dur}</div>
+          ${e.notes ? `<div class="cardio-item-notes">${e.notes}</div>` : ''}
+        </div>
+        <button class="cardio-item-delete" data-id="${e.id}" aria-label="Delete">×</button>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('.cardio-item-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const arr = getCardioForDate(key).filter(e => e.id !== id);
+        setCardioForDate(key, arr);
+        renderCardioSection();
+      });
+    });
+  }
+}
+
+function openCardioModal() {
+  const key = todayKey();
+  const defaults = cardioDefaults(key);
+  const m = document.getElementById('cardioModal');
+  document.getElementById('cardioActivity').value = defaults.activity;
+  document.getElementById('cardioIntensity').value = defaults.intensity;
+  document.getElementById('cardioDuration').value = '';
+  document.getElementById('cardioDistance').value = '';
+  document.getElementById('cardioStationary').checked = false;
+  document.getElementById('cardioNotes').value = '';
+  document.getElementById('cardioError').hidden = true;
+  updateCardioFormVisibility();
+  m.hidden = false;
+  setTimeout(() => document.getElementById('cardioDuration').focus(), 50);
+}
+function closeCardioModal() {
+  document.getElementById('cardioModal').hidden = true;
+}
+function updateCardioFormVisibility() {
+  const act = document.getElementById('cardioActivity').value;
+  const stat = document.getElementById('cardioStationary').checked;
+  const distLabel = document.getElementById('cardioDistanceLabel');
+  const distWrap = document.getElementById('cardioDistanceWrap');
+  const statWrap = document.getElementById('cardioStationaryWrap');
+  statWrap.style.display = act === 'Swimming' ? '' : 'none';
+  distWrap.style.display = showsDistance(act, stat) ? '' : 'none';
+  distLabel.textContent = 'Distance (' + distanceUnitFor(act) + ')';
+}
+function saveCardioEntry() {
+  const key = todayKey();
+  const activity = document.getElementById('cardioActivity').value;
+  const durationMin = parseFloat(document.getElementById('cardioDuration').value) || 0;
+  const distanceStr = document.getElementById('cardioDistance').value;
+  const distance = distanceStr ? parseFloat(distanceStr) : null;
+  const stationary = activity === 'Swimming' && document.getElementById('cardioStationary').checked;
+  const intensity = document.getElementById('cardioIntensity').value;
+  const notes = document.getElementById('cardioNotes').value.trim();
+  const errEl = document.getElementById('cardioError');
+  if (!durationMin || durationMin <= 0) {
+    errEl.textContent = 'Enter a duration in minutes.';
+    errEl.hidden = false;
+    return;
+  }
+  const entry = {
+    id: 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    activity, durationMin,
+    distance: (showsDistance(activity, stationary) && distance) ? distance : null,
+    distanceUnit: distanceUnitFor(activity),
+    stationary: stationary || undefined,
+    intensity,
+    notes: notes || undefined,
+    ts: Date.now(),
+  };
+  const arr = getCardioForDate(key);
+  arr.push(entry);
+  setCardioForDate(key, arr);
+  closeCardioModal();
+  renderCardioSection();
+}
+
+// Wire up cardio buttons on first load
+(function initCardio() {
+  const addBtn = document.getElementById('cardioAddBtn');
+  if (addBtn) addBtn.addEventListener('click', openCardioModal);
+  const saveBtn = document.getElementById('cardioSaveBtn');
+  if (saveBtn) saveBtn.addEventListener('click', saveCardioEntry);
+  const cancelBtn = document.getElementById('cardioCancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', closeCardioModal);
+  const actSel = document.getElementById('cardioActivity');
+  if (actSel) actSel.addEventListener('change', updateCardioFormVisibility);
+  const statChk = document.getElementById('cardioStationary');
+  if (statChk) statChk.addEventListener('change', updateCardioFormVisibility);
+  // Close on backdrop tap
+  const modal = document.getElementById('cardioModal');
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeCardioModal(); });
+})();
 
 function renderHabits() {
   const key = todayKey();
@@ -1931,6 +2110,61 @@ function renderProgress() {
   drawMeasurementChart();
   renderLiftTable();
   drawLiftChart();
+  renderCardioSummary();
+}
+
+function renderCardioSummary() {
+  const el = document.getElementById('cardio-summary');
+  if (!el) return;
+  const all = LS.get('cardio') || {};
+  const today = new Date(); today.setHours(12,0,0,0);
+  // Build last 4 ISO weeks (Mon–Sun)
+  const weeks = [];
+  for (let w = 0; w < 4; w++) {
+    const end = new Date(today); end.setDate(end.getDate() - (w * 7));
+    const day = end.getDay();
+    const offsetToMon = (day === 0 ? 6 : day - 1);
+    const start = new Date(end); start.setDate(start.getDate() - offsetToMon);
+    weeks.unshift({ start, end, totals: {} });
+  }
+  // Aggregate entries into weeks
+  Object.entries(all).forEach(([dateKey, arr]) => {
+    if (!Array.isArray(arr)) return;
+    const d = new Date(dateKey + 'T12:00:00');
+    weeks.forEach(week => {
+      const weekStart = new Date(week.start); weekStart.setHours(0,0,0,0);
+      const weekEnd = new Date(week.start); weekEnd.setDate(weekEnd.getDate() + 7); weekEnd.setHours(0,0,0,0);
+      if (d >= weekStart && d < weekEnd) {
+        arr.forEach(e => {
+          const a = e.activity || 'Other';
+          if (!week.totals[a]) week.totals[a] = { min: 0, dist: 0, unit: e.distanceUnit || distanceUnitFor(a) };
+          week.totals[a].min += (e.durationMin || 0);
+          if (e.distance && showsDistance(a, e.stationary)) week.totals[a].dist += e.distance;
+        });
+      }
+    });
+  });
+
+  const fmt = (d) => (d.getMonth()+1) + '/' + d.getDate();
+  const hasAny = weeks.some(w => Object.keys(w.totals).length > 0);
+  if (!hasAny) {
+    el.innerHTML = '<div class="cardio-empty">No cardio logged yet. Add a session from the Today tab.</div>';
+    return;
+  }
+  el.innerHTML = weeks.map(w => {
+    const acts = Object.entries(w.totals);
+    const weekLabel = 'Wk of ' + fmt(w.start);
+    if (acts.length === 0) {
+      return `<div class="cardio-week"><div class="cardio-week-label">${weekLabel}</div><div class="cardio-empty" style="padding:6px 0;text-align:left;">—</div></div>`;
+    }
+    const totalMin = acts.reduce((s, [,v]) => s + v.min, 0);
+    const rows = acts.map(([a, v]) => {
+      const icon = CARDIO_ICONS[a] || '⚡';
+      const dist = v.dist > 0 ? ` · ${v.dist.toFixed(1)} ${v.unit}` : '';
+      return `<div class="cardio-summary-row"><span class="cardio-item-icon" style="width:22px;">${icon}</span><span style="flex:1;">${a}</span><span style="color:var(--text-muted);font-size:13px;">${v.min} min${dist}</span></div>`;
+    }).join('');
+    return `<div class="cardio-week"><div class="cardio-week-label">${weekLabel} · ${totalMin} min total</div>${rows}</div>`;
+  }).join('');
 }
 
 function renderPhaseTimeline() {
