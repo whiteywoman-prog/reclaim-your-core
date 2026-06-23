@@ -150,7 +150,20 @@ const CloudSync = {
 
   // Apply a cloud blob into LS, merging where it's safe
   applyRemote(remote) {
-    if (!remote) return;
+    if (!remote) return false;
+    // Detect whether the remote payload actually differs from local before merging.
+    // If everything is identical, return false so callers can skip a wasteful re-render
+    // (which causes a visible scroll-jump on iOS Safari).
+    let changed = false;
+    try {
+      SYNC_KEYS.forEach(k => {
+        if (!(k in remote)) return;
+        const localVal = LS.get(k);
+        const a = JSON.stringify(localVal == null ? null : localVal);
+        const b = JSON.stringify(remote[k] == null ? null : remote[k]);
+        if (a !== b) changed = true;
+      });
+    } catch { changed = true; } // be safe: if compare fails, assume changed
     this.isApplyingRemote = true;
     try {
       SYNC_KEYS.forEach(k => {
@@ -212,6 +225,7 @@ const CloudSync = {
     } finally {
       this.isApplyingRemote = false;
     }
+    return changed;
   },
 
   // Push almost immediately on every change (tiny 250ms debounce just to
@@ -292,7 +306,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.2';
+    el.textContent = text + ' · v8.3';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -378,7 +392,16 @@ function safeRender(tabName, renderFn) {
     const detail = document.getElementById('history-detail-view');
     if (detail && detail.style.display !== 'none') return;
   }
+  // Preserve scroll position across the re-render — prevents the iOS Safari
+  // scroll-jump when the auto-poll rebuilds the active tab's DOM.
+  const scrollY = window.scrollY || window.pageYOffset || 0;
   try { renderFn(); } catch {}
+  // Restore on the next frame so layout has settled before we scroll.
+  if (scrollY > 0) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+    });
+  }
 }
 
 tabButtons.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -3084,10 +3107,12 @@ window.toggleTravelMode = toggleTravelMode;
       }
       const cloud = await CloudSync.pull();
       if (!cloud || !cloud.data) return;
-      CloudSync.applyRemote(cloud.data);
+      const changed = CloudSync.applyRemote(cloud.data);
       CloudSync.lastSyncAt = Date.now();
       CloudSync.status = 'synced';
       CloudSync._badge();
+      // Skip re-render when cloud data is identical to local — avoids scroll jumps.
+      if (!changed) return;
       // Only re-render the currently-viewed tab (others render on tab switch)
       safeRender('today', renderToday);
       safeRender('nutrition', renderNutrition);
