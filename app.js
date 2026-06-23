@@ -292,7 +292,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.0';
+    el.textContent = text + ' · v8.1';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -891,30 +891,23 @@ function renderWorkout(workoutId) {
     }
   }
 
-  // Phase guidance card — only on weighted (non-recovery) workouts
-  const existingPhase = document.getElementById('phase-guide-card');
-  if (existingPhase) existingPhase.remove();
+  // Phase guidance card — rendered in its own slot above the Cardio + Workout cards
+  const phaseSlot = document.getElementById('phase-guide-slot');
+  if (phaseSlot) phaseSlot.innerHTML = '';
   const isRecoveryDay = workout.name.includes('Recovery') || workout.name.includes('Vagus');
-  if (!isRecoveryDay && !settings.travelMode) {
+  if (phaseSlot && !isRecoveryDay && !settings.travelMode) {
     const wk = getProgramWeek();
     const ph = getPhase(wk);
-    const phaseCard = document.createElement('div');
-    phaseCard.id = 'phase-guide-card';
-    phaseCard.className = 'phase-guide-card phase-' + ph.id;
-    phaseCard.innerHTML = `
-      <div class="phase-guide-row">
-        <span class="phase-guide-name">${ph.name}</span>
-        <span class="phase-guide-week">Week ${wk} · ${ph.weeks}</span>
+    phaseSlot.innerHTML = `
+      <div class="card phase-guide-card phase-${ph.id}" id="phase-guide-card">
+        <div class="phase-guide-row">
+          <span class="phase-guide-name">${ph.name}</span>
+          <span class="phase-guide-week">Week ${wk} · ${ph.weeks}</span>
+        </div>
+        <div class="phase-guide-headline">${ph.headline}</div>
+        <div class="phase-guide-tip">Main lifts: ${ph.mainPct} · ${ph.tip}</div>
       </div>
-      <div class="phase-guide-headline">${ph.headline}</div>
-      <div class="phase-guide-tip">Main lifts: ${ph.mainPct} · ${ph.tip}</div>
     `;
-    // Insert above the card-header (full-width), not as a sibling of the title (which is in a flex row)
-    const workoutCard = document.getElementById('workout-card');
-    const cardHeader = workoutCard ? workoutCard.querySelector('.card-header') : null;
-    if (workoutCard && cardHeader) {
-      workoutCard.insertBefore(phaseCard, cardHeader);
-    }
   }
 
   // Section labels — workout 3 (Active Recovery) uses different labels
