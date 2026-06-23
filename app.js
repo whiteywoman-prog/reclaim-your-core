@@ -306,7 +306,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.3';
+    el.textContent = text + ' · v8.4';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
