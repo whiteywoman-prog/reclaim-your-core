@@ -306,7 +306,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.5';
+    el.textContent = text + ' · v8.6';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -431,33 +431,58 @@ function getSettings() {
   };
   const saved = LS.get('settings');
   const merged = saved ? Object.assign({}, defaults, saved) : defaults;
-  // Migration: if user had custom legacy targets but no targetsByDay yet,
-  // seed targetsByDay from legacy values so they don't lose their tuning.
+  // Migration: if user had custom legacy targets but no targetsByDay yet, decide what to do.
+  // • If legacy values match the OLD generic defaults (1700/105/170/57), they were never
+  //   intentionally customized — force the science-based defaults.
+  // • Otherwise (user tuned them at some point), seed targetsByDay from legacy and auto-scale.
   if (saved && !saved.targetsByDay && (saved.caloriesTarget || saved.proteinTarget)) {
-    const legacy = {
-      calories: saved.caloriesTarget || 2050,
-      protein:  saved.proteinTarget  || 130,
-      carbs:    saved.carbsTarget    || 200,
-      fat:      saved.fatTarget      || 75,
-    };
-    // Use legacy as Rest baseline; auto-scale strength/endurance from defaults' deltas
-    const dRest = DEFAULT_TARGETS_BY_DAY.rest;
-    const dStr  = DEFAULT_TARGETS_BY_DAY.strength;
-    const dEnd  = DEFAULT_TARGETS_BY_DAY.endurance;
-    merged.targetsByDay = {
-      rest: { ...legacy },
-      strength:  { calories: legacy.calories + (dStr.calories - dRest.calories),
-                   protein:  legacy.protein,
-                   carbs:    legacy.carbs    + (dStr.carbs    - dRest.carbs),
-                   fat:      legacy.fat },
-      endurance: { calories: legacy.calories + (dEnd.calories - dRest.calories),
-                   protein:  legacy.protein,
-                   carbs:    legacy.carbs    + (dEnd.carbs    - dRest.carbs),
-                   fat:      legacy.fat },
-    };
+    const isUntouchedLegacy = (
+      (saved.caloriesTarget === 1700 || saved.caloriesTarget == null) &&
+      (saved.proteinTarget  === 105  || saved.proteinTarget  == null) &&
+      (saved.carbsTarget    === 170  || saved.carbsTarget    == null) &&
+      (saved.fatTarget      === 57   || saved.fatTarget      == null)
+    );
+    if (isUntouchedLegacy) {
+      merged.targetsByDay = JSON.parse(JSON.stringify(DEFAULT_TARGETS_BY_DAY));
+    } else {
+      const legacy = {
+        calories: saved.caloriesTarget || 2050,
+        protein:  saved.proteinTarget  || 130,
+        carbs:    saved.carbsTarget    || 200,
+        fat:      saved.fatTarget      || 75,
+      };
+      const dRest = DEFAULT_TARGETS_BY_DAY.rest;
+      const dStr  = DEFAULT_TARGETS_BY_DAY.strength;
+      const dEnd  = DEFAULT_TARGETS_BY_DAY.endurance;
+      merged.targetsByDay = {
+        rest: { ...legacy },
+        strength:  { calories: legacy.calories + (dStr.calories - dRest.calories),
+                     protein:  legacy.protein,
+                     carbs:    legacy.carbs    + (dStr.carbs    - dRest.carbs),
+                     fat:      legacy.fat },
+        endurance: { calories: legacy.calories + (dEnd.calories - dRest.calories),
+                     protein:  legacy.protein,
+                     carbs:    legacy.carbs    + (dEnd.carbs    - dRest.carbs),
+                     fat:      legacy.fat },
+      };
+    }
+    // Persist the migrated targets so they sync to cloud and other devices
+    saved.targetsByDay = merged.targetsByDay;
+    LS.set('settings', saved);
   }
   // Ensure all three day-types exist after merge (in case partial save)
   merged.targetsByDay = Object.assign({}, DEFAULT_TARGETS_BY_DAY, merged.targetsByDay || {});
+
+  // One-time corrective migration: if the prior v8.5 migration produced a `rest`
+  // calories value of 1700 (from the OLD untouched generic legacy defaults),
+  // upgrade everything to the science-based defaults.
+  if (saved && saved.targetsByDay && !saved.targetsByDayUpgradedFrom1700 &&
+      saved.targetsByDay.rest && saved.targetsByDay.rest.calories === 1700) {
+    merged.targetsByDay = JSON.parse(JSON.stringify(DEFAULT_TARGETS_BY_DAY));
+    saved.targetsByDay = merged.targetsByDay;
+    saved.targetsByDayUpgradedFrom1700 = true;
+    LS.set('settings', saved);
+  }
   return merged;
 }
 function saveSettings(s) { LS.set('settings', s); }
@@ -470,10 +495,18 @@ function dayTypeForWorkoutId(workoutId) {
   return 'rest';
 }
 
+// Derive day type directly from a date (handles weekends as endurance for cycling)
+function dayTypeForDate(dateLike) {
+  const d = (dateLike instanceof Date) ? dateLike : new Date((dateLike || todayKey()) + 'T12:00:00');
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return 'endurance';   // Sat/Sun cycling
+  if (dow === 3) return 'rest';                      // Wed recovery
+  return 'strength';                                 // Mon/Tue/Thu/Fri
+}
+
 function getTargetsForDate(dateLike) {
   const settings = getSettings();
-  const id = getWorkoutIdForDate(dateLike || new Date());
-  const type = dayTypeForWorkoutId(id);
+  const type = dayTypeForDate(dateLike || new Date());
   const t = settings.targetsByDay[type] || settings.targetsByDay.rest;
   return { ...t, dayType: type };
 }
