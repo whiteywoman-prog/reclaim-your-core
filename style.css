@@ -1863,3 +1863,89 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* ── v8.5: Day-type-aware nutrition ── */
+.day-type-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  background: #d9d6cf;
+  color: #1a1a1a;
+  border: 1px solid #b8b3a8;
+}
+.day-type-badge.day-type-rest      { background: #d9d6cf; color: #1a1a1a; }
+.day-type-badge.day-type-strength  { background: #c9d8d6; color: #0d3a36; border-color: #8fb0ad; }
+.day-type-badge.day-type-endurance { background: #e8d4b8; color: #5a3a14; border-color: #c8a674; }
+
+.day-type-block {
+  background: #efece5;
+  border: 1px solid #d4d1ca;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+[data-theme="dark"] .day-type-block {
+  background: #2a2a28;
+  border-color: #3a3a38;
+}
+.day-type-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--color-text);
+}
+.day-type-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted, #6b6b6b);
+  margin-left: 4px;
+}
+.day-type-block .settings-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.day-type-block .measurement-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted, #6b6b6b);
+  display: block;
+  margin-bottom: 2px;
+}
+.day-type-block .measurement-field input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #b8b3a8;
+  border-radius: 4px;
+  background: #fff;
+  color: #1a1a1a;
+  box-sizing: border-box;
+}
+[data-theme="dark"] .day-type-block .measurement-field input {
+  background: #1a1a1a;
+  color: #efece5;
+  border-color: #3a3a38;
+}
+.hint-text {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b6b6b);
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--color-accent, #1f5f5c);
+  border: 1px solid var(--color-accent, #1f5f5c);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}

@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Reclaim Your Core</title>
-  <link rel="stylesheet" href="style.css?v=8.4">
+  <link rel="stylesheet" href="style.css?v=8.5">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -113,8 +113,9 @@
             </div>
           </div>
           <div class="protein-ring-info">
-            <div class="protein-target-display">Protein target: <strong id="proteinTargetDisplay">105g</strong></div>
-            <div class="protein-remaining" id="proteinRemaining">105g remaining</div>
+            <div class="day-type-badge" id="dayTypeBadge">Rest day</div>
+            <div class="protein-target-display">Protein target: <strong id="proteinTargetDisplay">130g</strong></div>
+            <div class="protein-remaining" id="proteinRemaining">130g remaining</div>
           </div>
         </div>
 
@@ -156,25 +157,40 @@
             <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <div class="accordion-body">
-            <div class="settings-row">
-              <div class="measurement-field" style="min-width:80px;flex:0">
-                <label>Calories (kcal)</label>
-                <input type="number" id="caloriesTargetInput" min="800" max="4000" value="1700">
-              </div>
-              <div class="measurement-field" style="min-width:80px;flex:0">
-                <label>Protein (g)</label>
-                <input type="number" id="proteinTargetInput" min="50" max="300" value="105">
-              </div>
-              <div class="measurement-field" style="min-width:80px;flex:0">
-                <label>Carbs (g)</label>
-                <input type="number" id="carbsTargetInput" min="0" max="600" value="170">
-              </div>
-              <div class="measurement-field" style="min-width:80px;flex:0">
-                <label>Fat (g)</label>
-                <input type="number" id="fatTargetInput" min="0" max="200" value="57">
+            <p class="hint-text">Targets flex by day type. Defaults are based on Stacy Sims / IOC RED-S guidance for active women 50+ at 140 lb.</p>
+
+            <div class="day-type-block">
+              <h4 class="day-type-title">Rest day <span class="day-type-sub">(Wed)</span></h4>
+              <div class="settings-row">
+                <div class="measurement-field"><label>kcal</label><input type="number" id="restCalInput" min="800" max="4500"></div>
+                <div class="measurement-field"><label>Protein (g)</label><input type="number" id="restProtInput" min="50" max="300"></div>
+                <div class="measurement-field"><label>Carbs (g)</label><input type="number" id="restCarbInput" min="0" max="600"></div>
+                <div class="measurement-field"><label>Fat (g)</label><input type="number" id="restFatInput" min="0" max="200"></div>
               </div>
             </div>
+
+            <div class="day-type-block">
+              <h4 class="day-type-title">Strength day <span class="day-type-sub">(Mon, Tue, Thu, Fri)</span></h4>
+              <div class="settings-row">
+                <div class="measurement-field"><label>kcal</label><input type="number" id="strCalInput" min="800" max="4500"></div>
+                <div class="measurement-field"><label>Protein (g)</label><input type="number" id="strProtInput" min="50" max="300"></div>
+                <div class="measurement-field"><label>Carbs (g)</label><input type="number" id="strCarbInput" min="0" max="600"></div>
+                <div class="measurement-field"><label>Fat (g)</label><input type="number" id="strFatInput" min="0" max="200"></div>
+              </div>
+            </div>
+
+            <div class="day-type-block">
+              <h4 class="day-type-title">Endurance day <span class="day-type-sub">(Sat, Sun cycling)</span></h4>
+              <div class="settings-row">
+                <div class="measurement-field"><label>kcal</label><input type="number" id="endCalInput" min="800" max="4500"></div>
+                <div class="measurement-field"><label>Protein (g)</label><input type="number" id="endProtInput" min="50" max="300"></div>
+                <div class="measurement-field"><label>Carbs (g)</label><input type="number" id="endCarbInput" min="0" max="600"></div>
+                <div class="measurement-field"><label>Fat (g)</label><input type="number" id="endFatInput" min="0" max="200"></div>
+              </div>
+            </div>
+
             <button class="btn-primary" id="saveMacroTargetsBtn">Save Targets</button>
+            <button class="btn-secondary" id="resetMacroTargetsBtn" style="margin-top:8px">Reset to science-based defaults</button>
           </div>
         </div>
 
@@ -814,6 +830,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8.4"></script>
+  <script src="app.js?v=8.5"></script>
 </body>
 </html>

@@ -306,7 +306,7 @@ const CloudSync = {
       if (ago < 60) text = 'Synced ' + ago + 's ago';
       else text = 'Synced ' + Math.floor(ago/60) + 'm ago';
     }
-    el.textContent = text + ' · v8.4';
+    el.textContent = text + ' · v8.5';
     el.className = 'sync-badge sync-' + this.status;
   },
 };
@@ -407,21 +407,76 @@ function safeRender(tabName, renderFn) {
 tabButtons.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
 // ── Settings ──
+// Day-type-aware nutrition targets (Stacy Sims / IOC RED-S framing for women 50+).
+// Rest = baseline. Strength = +carbs/+kcal. Endurance = +carbs/+kcal (cycling Sat/Sun).
+const DEFAULT_TARGETS_BY_DAY = {
+  rest:      { calories: 2050, protein: 130, carbs: 200, fat: 75 },
+  strength:  { calories: 2250, protein: 130, carbs: 240, fat: 75 },
+  endurance: { calories: 2450, protein: 130, carbs: 290, fat: 75 },
+};
+
 function getSettings() {
   const defaults = {
-    proteinTarget: 105,
-    caloriesTarget: 1700,
-    carbsTarget: 170,
-    fatTarget: 57,
+    // Legacy single-day targets (kept for backwards compat; migrated below)
+    proteinTarget: 130,
+    caloriesTarget: 2050,
+    carbsTarget: 200,
+    fatTarget: 75,
+    // New day-type-aware targets
+    targetsByDay: DEFAULT_TARGETS_BY_DAY,
     bodyWeight: 140,
     startDate: '2026-03-31',
     travelMode: false,
     workoutPointer: 1,
   };
   const saved = LS.get('settings');
-  return saved ? Object.assign({}, defaults, saved) : defaults;
+  const merged = saved ? Object.assign({}, defaults, saved) : defaults;
+  // Migration: if user had custom legacy targets but no targetsByDay yet,
+  // seed targetsByDay from legacy values so they don't lose their tuning.
+  if (saved && !saved.targetsByDay && (saved.caloriesTarget || saved.proteinTarget)) {
+    const legacy = {
+      calories: saved.caloriesTarget || 2050,
+      protein:  saved.proteinTarget  || 130,
+      carbs:    saved.carbsTarget    || 200,
+      fat:      saved.fatTarget      || 75,
+    };
+    // Use legacy as Rest baseline; auto-scale strength/endurance from defaults' deltas
+    const dRest = DEFAULT_TARGETS_BY_DAY.rest;
+    const dStr  = DEFAULT_TARGETS_BY_DAY.strength;
+    const dEnd  = DEFAULT_TARGETS_BY_DAY.endurance;
+    merged.targetsByDay = {
+      rest: { ...legacy },
+      strength:  { calories: legacy.calories + (dStr.calories - dRest.calories),
+                   protein:  legacy.protein,
+                   carbs:    legacy.carbs    + (dStr.carbs    - dRest.carbs),
+                   fat:      legacy.fat },
+      endurance: { calories: legacy.calories + (dEnd.calories - dRest.calories),
+                   protein:  legacy.protein,
+                   carbs:    legacy.carbs    + (dEnd.carbs    - dRest.carbs),
+                   fat:      legacy.fat },
+    };
+  }
+  // Ensure all three day-types exist after merge (in case partial save)
+  merged.targetsByDay = Object.assign({}, DEFAULT_TARGETS_BY_DAY, merged.targetsByDay || {});
+  return merged;
 }
 function saveSettings(s) { LS.set('settings', s); }
+
+// Derive day type from a workout id (1=Mon Push, 2=Tue Quad, 3=Wed Rec, 4=Thu Pull, 5=Fri Hinge, 6=Sat Cycle, 7=Sun Cycle)
+function dayTypeForWorkoutId(workoutId) {
+  if (workoutId === 6 || workoutId === 7) return 'endurance';
+  if (workoutId === 3) return 'rest';
+  if (workoutId === 1 || workoutId === 2 || workoutId === 4 || workoutId === 5) return 'strength';
+  return 'rest';
+}
+
+function getTargetsForDate(dateLike) {
+  const settings = getSettings();
+  const id = getWorkoutIdForDate(dateLike || new Date());
+  const type = dayTypeForWorkoutId(id);
+  const t = settings.targetsByDay[type] || settings.targetsByDay.rest;
+  return { ...t, dayType: type };
+}
 
 // ── Program Week ──
 function getProgramWeek() {
@@ -925,14 +980,16 @@ function renderKPIs() {
   const suppData = getSupplementsData();
   const suppDone = SUPPLEMENTS.filter((_, i) => suppData['s_' + i]).length;
 
-  // Calories KPI (show alongside protein)
+  // Day-type-aware targets for KPIs
+  const todayTargets = getTargetsForDate(todayKey());
   const cals = nutrition.totals.calories;
-  const calTarget = settings.caloriesTarget;
+  const calTarget = todayTargets.calories;
+  const proteinTarget = todayTargets.protein;
 
   $('#kpi-grid').innerHTML = `
     <div class="kpi-card">
       <div class="kpi-label">Protein</div>
-      <div class="kpi-value">${nutrition.totals.protein}<span class="kpi-unit">/ ${settings.proteinTarget}g</span></div>
+      <div class="kpi-value">${nutrition.totals.protein}<span class="kpi-unit">/ ${proteinTarget}g</span></div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Calories</div>
@@ -2008,38 +2065,39 @@ function renderNutrition() {
   const data = getNutritionData();
   const t = data.totals;
 
+  // Day-type-aware targets (overrides legacy single-day settings)
+  const targets = getTargetsForDate(todayKey());
+  updateDayTypeBadge(targets.dayType);
+
   // Protein ring
-  $('#proteinTargetLabel').textContent = settings.proteinTarget + 'g';
-  $('#proteinTargetDisplay').textContent = settings.proteinTarget + 'g';
+  $('#proteinTargetLabel').textContent = targets.protein + 'g';
+  $('#proteinTargetDisplay').textContent = targets.protein + 'g';
   $('#proteinRingValue').textContent = t.protein + 'g';
-  const remaining = Math.max(0, settings.proteinTarget - t.protein);
+  const remaining = Math.max(0, targets.protein - t.protein);
   $('#proteinRemaining').textContent = remaining > 0 ? remaining + 'g remaining' : 'Target reached!';
   $('#proteinRemaining').style.color = remaining === 0 ? 'var(--color-success)' : '';
 
   drawProteinRing();
 
   // Macro bars
-  const calPct = Math.min(t.calories / (settings.caloriesTarget || 1700) * 100, 100).toFixed(1);
-  const carbPct = Math.min(t.carbs / (settings.carbsTarget || 170) * 100, 100).toFixed(1);
-  const fatPct = Math.min(t.fat / (settings.fatTarget || 57) * 100, 100).toFixed(1);
+  const calPct = Math.min(t.calories / (targets.calories || 2050) * 100, 100).toFixed(1);
+  const carbPct = Math.min(t.carbs / (targets.carbs || 200) * 100, 100).toFixed(1);
+  const fatPct = Math.min(t.fat / (targets.fat || 75) * 100, 100).toFixed(1);
 
   $('#caloriesCurrent').textContent = t.calories;
-  $('#caloriesTarget').textContent = settings.caloriesTarget || 1700;
+  $('#caloriesTarget').textContent = targets.calories || 2050;
   $('#caloriesBar').style.width = calPct + '%';
 
   $('#carbsCurrent').textContent = t.carbs;
-  $('#carbsTarget').textContent = settings.carbsTarget || 170;
+  $('#carbsTarget').textContent = targets.carbs || 200;
   $('#carbsBar').style.width = carbPct + '%';
 
   $('#fatCurrent').textContent = t.fat;
-  $('#fatTarget').textContent = settings.fatTarget || 57;
+  $('#fatTarget').textContent = targets.fat || 75;
   $('#fatBar').style.width = fatPct + '%';
 
-  // Macro target inputs
-  $('#proteinTargetInput').value = settings.proteinTarget;
-  $('#caloriesTargetInput').value = settings.caloriesTarget || 1700;
-  $('#carbsTargetInput').value = settings.carbsTarget || 170;
-  $('#fatTargetInput').value = settings.fatTarget || 57;
+  // Day-type target inputs
+  populateMacroSettingsInputs();
 
   renderQuickAddGrid();
   renderMyFoodsGrid();
@@ -2058,9 +2116,9 @@ function drawProteinRing() {
   canvas.style.height = size + 'px';
   ctx.scale(dpr, dpr);
 
-  const settings = getSettings();
   const data = getNutritionData();
-  const pct = Math.min(data.totals.protein / settings.proteinTarget, 1);
+  const targets = getTargetsForDate(todayKey());
+  const pct = Math.min(data.totals.protein / targets.protein, 1);
 
   const cx = size / 2;
   const cy = size / 2;
@@ -2240,21 +2298,71 @@ $('#clearDayBtn').addEventListener('click', () => {
   }
 });
 
-// Macro targets save
+// Day-type macro targets save
+function _readDayInputs(prefix) {
+  const cal  = parseInt($('#' + prefix + 'CalInput').value);
+  const prot = parseInt($('#' + prefix + 'ProtInput').value);
+  const carb = parseInt($('#' + prefix + 'CarbInput').value);
+  const fat  = parseInt($('#' + prefix + 'FatInput').value);
+  return {
+    calories: (cal >= 800 && cal <= 4500) ? cal : null,
+    protein:  (prot >= 50 && prot <= 300) ? prot : null,
+    carbs:    (carb >= 0 && carb <= 600)  ? carb : null,
+    fat:      (fat >= 0 && fat <= 200)    ? fat  : null,
+  };
+}
+function _populateDayInputs(prefix, t) {
+  $('#' + prefix + 'CalInput').value  = t.calories;
+  $('#' + prefix + 'ProtInput').value = t.protein;
+  $('#' + prefix + 'CarbInput').value = t.carbs;
+  $('#' + prefix + 'FatInput').value  = t.fat;
+}
+
+function populateMacroSettingsInputs() {
+  const s = getSettings();
+  _populateDayInputs('rest', s.targetsByDay.rest);
+  _populateDayInputs('str',  s.targetsByDay.strength);
+  _populateDayInputs('end',  s.targetsByDay.endurance);
+}
+
 $('#saveMacroTargetsBtn').addEventListener('click', () => {
   const s = getSettings();
-  const cal = parseInt($('#caloriesTargetInput').value);
-  const prot = parseInt($('#proteinTargetInput').value);
-  const carb = parseInt($('#carbsTargetInput').value);
-  const fatV = parseInt($('#fatTargetInput').value);
-  if (prot >= 50 && prot <= 300) s.proteinTarget = prot;
-  if (cal >= 800 && cal <= 4000) s.caloriesTarget = cal;
-  if (carb >= 0 && carb <= 600) s.carbsTarget = carb;
-  if (fatV >= 0 && fatV <= 200) s.fatTarget = fatV;
+  const rest = _readDayInputs('rest');
+  const str  = _readDayInputs('str');
+  const end  = _readDayInputs('end');
+  ['calories','protein','carbs','fat'].forEach(k => {
+    if (rest[k] != null) s.targetsByDay.rest[k] = rest[k];
+    if (str[k]  != null) s.targetsByDay.strength[k] = str[k];
+    if (end[k]  != null) s.targetsByDay.endurance[k] = end[k];
+  });
+  // Mirror today's targets back to legacy keys so anything still reading them stays sane
+  const todayT = s.targetsByDay.strength;
+  s.proteinTarget = todayT.protein;
+  s.caloriesTarget = todayT.calories;
+  s.carbsTarget = todayT.carbs;
+  s.fatTarget = todayT.fat;
   saveSettings(s);
   renderNutrition();
   renderKPIs();
 });
+
+$('#resetMacroTargetsBtn').addEventListener('click', () => {
+  if (!confirm('Reset all day-type targets to science-based defaults?')) return;
+  const s = getSettings();
+  s.targetsByDay = JSON.parse(JSON.stringify(DEFAULT_TARGETS_BY_DAY));
+  saveSettings(s);
+  populateMacroSettingsInputs();
+  renderNutrition();
+  renderKPIs();
+});
+
+function updateDayTypeBadge(dayType) {
+  const el = document.getElementById('dayTypeBadge');
+  if (!el) return;
+  const labels = { rest: 'Rest day', strength: 'Strength day', endurance: 'Endurance day' };
+  el.textContent = labels[dayType] || 'Rest day';
+  el.className = 'day-type-badge day-type-' + dayType;
+}
 
 // ── SUPPLEMENTS Tab ──
 function renderSupplements() {
